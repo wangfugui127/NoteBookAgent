@@ -1,0 +1,161 @@
+name: notebookagent
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  env_file:
+    - path: .env.example
+    - path: .env
+      required: false
+  volumes:
+    - uploads:/data/uploads
+    - ./config:/app/config:ro
+    - ./skills:/app/skills:ro
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    milvus:
+      condition: service_healthy
+  restart: unless-stopped
+  profiles: [core]
+
+services:
+  mysql:
+    image: mysql:8.4
+    profiles: [core]
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-notebookagent}
+      MYSQL_USER: ${MYSQL_USER:-notebookagent}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-notebookagent}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local-root-password}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    volumes: [mysql-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    profiles: [core]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    profiles: [core]
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls=http://0.0.0.0:2379 --data-dir /etcd
+    volumes: [etcd-data:/etcd]
+    restart: unless-stopped
+
+  minio:
+    # Docker Hub no longer reliably serves MinIO release images. Use the
+    # upstream Quay registry and the tag used by Milvus' standalone stack.
+    image: quay.io/minio/minio:RELEASE.2024-05-28T17-19-04Z
+    profiles: [core]
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    command: minio server /minio_data --console-address :9001
+    volumes: [minio-data:/minio_data]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  milvus:
+    image: milvusdb/milvus:v2.6.4
+    profiles: [core]
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes: [milvus-data:/var/lib/milvus]
+    depends_on:
+      etcd: { condition: service_started }
+      minio: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.26-community
+    profiles: [graph]
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-notebookagent-neo4j}
+      NEO4J_server_memory_heap_initial__size: 384m
+      NEO4J_server_memory_heap_max__size: 768m
+      NEO4J_server_memory_pagecache_size: 512m
+    ports: ["7474:7474", "7687:7687"]
+    volumes: [neo4j-data:/data]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:-notebookagent-neo4j} 'RETURN 1'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["python", "-m", "app.scripts.init_db"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    ports: ["8001:8001"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      milvus: { condition: service_healthy }
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      milvus: { condition: service_healthy }
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    profiles: [core]
+    ports: ["3000:80"]
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:
+  etcd-data:
+  minio-data:
+  milvus-data:
+  neo4j-data:
+  uploads:

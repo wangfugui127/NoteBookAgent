@@ -1,0 +1,14 @@
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def test_health_and_protected_routes_are_mounted() -> None:
+    with TestClient(app) as client:
+        health = client.get("/health")
+        agent = client.post("/api/v1/agent/runs", json={"conversation_id": "x", "query": "q"})
+        mcp = client.post("/mcp")
+    assert health.status_code == 200
+    assert health.json() == {"status": "ok"}
+    assert agent.status_code == 401
+    assert mcp.status_code != 404

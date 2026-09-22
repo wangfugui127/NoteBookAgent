@@ -1,0 +1,55 @@
+[project]
+name = "notebookagent"
+version = "0.1.0"
+description = "Evidence-grounded research notebook agent"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "alembic>=1.14",
+  "asyncmy>=0.2.10",
+  "celery[redis]>=5.4",
+  "email-validator>=2.2",
+  "fastapi>=0.115",
+  "httpx>=0.28",
+  "httpx2>=2.13",
+  "langgraph>=1.0",
+  "mcp>=2.0",
+  "neo4j>=5.28",
+  "openai>=1.68",
+  "orjson>=3.10",
+  "pydantic-settings>=2.8",
+  "pyjwt>=2.10",
+  "pymilvus>=2.6.4,<2.7",
+  "pymupdf>=1.25",
+  "python-multipart>=0.0.20",
+  "pyyaml>=6.0",
+  "redis>=5.2",
+  "sqlalchemy[asyncio]>=2.0.38",
+  "sse-starlette>=2.2",
+  "uvicorn[standard]>=0.34",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.15",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "respx>=0.22",
+  "ruff>=0.11",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]

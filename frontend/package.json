@@ -1,0 +1,28 @@
+{
+  "name": "notebookagent-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3000",
+    "build": "vue-tsc --noEmit -p tsconfig.json && vite build",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "latest",
+    "axios": "latest",
+    "pinia": "latest",
+    "vue": "latest",
+    "vue-router": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "eslint": "latest",
+    "eslint-plugin-vue": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vite": "latest",
+    "vue-tsc": "latest"
+  }
+}

@@ -1,0 +1,72 @@
+:root {
+  /* Palette — Calm Research Desk (cool paper, graphite ink, single teal accent) */
+  --canvas: #f4f5f3;
+  --surface: #ffffff;
+  --surface-2: #fafaf8;
+  --surface-sunken: #eceee9;
+  --ink: #1a1c1b;
+  --ink-2: #333835;
+  --muted: #5b615e;
+  --muted-2: #7d837f;
+  --line: #e3e5e2;
+  --line-strong: #ced2cd;
+  --accent: #0f6e63;
+  --accent-strong: #0b544c;
+  --accent-soft: #e7f1ef;
+  --accent-ink: #0a3d37;
+  --success: #1f7a4d;
+  --success-soft: #e9f4ee;
+  --warning: #8a5100;
+  --warning-soft: #f8f0e2;
+  --danger: #b3261e;
+  --danger-soft: #fbeceb;
+
+  /* Typography */
+  --font-sans: "Noto Sans SC", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --text-display: 30px;
+  --text-h1: 22px;
+  --text-h2: 18px;
+  --text-body: 16px;
+  --text-sm: 15px;
+  --text-meta: 13px;
+  --text-micro: 12px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.75;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  /* Shadow — only two elevations exist: popover and modal */
+  --shadow-pop: 0 12px 32px -14px rgba(20, 24, 22, 0.3);
+  --shadow-modal: 0 28px 72px -28px rgba(20, 24, 22, 0.4);
+  --shadow-focus: 0 0 0 3px rgba(15, 110, 99, 0.26);
+
+  /* Layout */
+  --topbar-h: 56px;
+  --panel-left: 272px;
+  --panel-right: 320px;
+  --reading: 72ch;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+}

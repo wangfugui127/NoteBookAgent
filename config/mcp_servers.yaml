@@ -1,0 +1,22 @@
+servers: []
+
+# Example remote server:
+# servers:
+#   - id: example
+#     enabled: true
+#     transport: streamable_http
+#     url: ${EXAMPLE_MCP_URL}
+#     auth_env: EXAMPLE_MCP_TOKEN
+#     allowed_tools: [search, read]
+#     default_risk: read
+
+# Example local server:
+#   - id: local-example
+#     enabled: true
+#     transport: stdio
+#     command: uvx
+#     args: [some-mcp-server]
+#     env:
+#       API_KEY: ${SOME_API_KEY}
+#     default_risk: write
+

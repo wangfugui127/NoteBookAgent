@@ -1,0 +1,9 @@
+enabled: true
+path: /mcp
+allowed_tools:
+  - list_notebook_sources
+  - search_notebook
+  - get_notebook_items
+  - search_papers
+  - get_paper_details
+

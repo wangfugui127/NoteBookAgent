@@ -1,0 +1,15 @@
+.git
+.env
+.idea
+.vscode
+**/.venv
+**/node_modules
+**/dist
+**/.npm-cache
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.pyc
+**/*.pyo
+**/*.tsbuildinfo
+*.log
