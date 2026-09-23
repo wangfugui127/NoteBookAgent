@@ -16,3 +16,7 @@ data/
 *.log
 a111常见操作/
 a阅读md/
+
+# 本地聊天/会话记录（不纳入版本控制）
+session-ses_*.md
+Codex聊天记录_*.md
