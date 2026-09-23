@@ -188,7 +188,7 @@ defineExpose({ focus })
               <span class="convo__caret" aria-hidden="true">▾</span>
             </button>
 
-            <div v-if="menuOpen" class="convo-menu" role="menu">
+            <div v-if="menuOpen" class="convo-menu" role="menu" @click.stop>
               <button class="convo-menu__new" type="button" role="menuitem" @click="onCreate">
                 新建对话
               </button>
@@ -222,7 +222,6 @@ defineExpose({ focus })
                     <button
                       class="convo-menu__delete"
                       type="button"
-                      :disabled="running"
                       title="删除对话"
                       :aria-label="`删除对话：${item.title || '未命名对话'}`"
                       @click="pendingDelete = item.id"

@@ -355,3 +355,79 @@ class RunTranscript(Base, TimestampMixin):
         ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
     messages: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+
+
+class EvalDataset(Base, TimestampMixin):
+    __tablename__ = "eval_datasets"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+
+
+class EvalCase(Base, TimestampMixin):
+    __tablename__ = "eval_cases"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_datasets.id", ondelete="CASCADE"), index=True
+    )
+    case_key: Mapped[str] = mapped_column(String(120))
+    question: Mapped[str] = mapped_column(LONG_TEXT)
+    expected_tools: Mapped[list[str]] = mapped_column(JSON, default=list)
+    expected_source_titles: Mapped[list[str]] = mapped_column(JSON, default=list)
+    required_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    ordinal: Mapped[int] = mapped_column(Integer, default=0)
+    __table_args__ = (UniqueConstraint("dataset_id", "case_key"),)
+
+
+class EvalRun(Base, TimestampMixin):
+    __tablename__ = "eval_runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    notebook_id: Mapped[str] = mapped_column(
+        ForeignKey("notebooks.id", ondelete="CASCADE"), index=True
+    )
+    dataset_id: Mapped[str | None] = mapped_column(
+        ForeignKey("eval_datasets.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    dataset_name: Mapped[str] = mapped_column(String(255), default="")
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    total_cases: Mapped[int] = mapped_column(Integer, default=0)
+    completed_cases: Mapped[int] = mapped_column(Integer, default=0)
+    passed_cases: Mapped[int] = mapped_column(Integer, default=0)
+    current_case_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    current_agent_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    current_case_result_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    score_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class EvalCaseResult(Base, TimestampMixin):
+    __tablename__ = "eval_case_results"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    eval_run_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_runs.id", ondelete="CASCADE"), index=True
+    )
+    case_key: Mapped[str] = mapped_column(String(120), default="")
+    ordinal: Mapped[int] = mapped_column(Integer, default=0)
+    question: Mapped[str] = mapped_column(LONG_TEXT)
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    expected_tools: Mapped[list[str]] = mapped_column(JSON, default=list)
+    actual_tools: Mapped[list[str]] = mapped_column(JSON, default=list)
+    expected_source_titles: Mapped[list[str]] = mapped_column(JSON, default=list)
+    matched_sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    missing_sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    required_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    matched_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    answer: Mapped[str | None] = mapped_column(LONG_TEXT, nullable=True)
+    route_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    retrieval_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    citation_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    keyword_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    passed: Mapped[bool] = mapped_column(Boolean, default=False)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agent_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

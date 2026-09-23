@@ -7,7 +7,7 @@ celery_app = Celery(
     "notebookagent",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.ingestion.tasks", "app.agent.tasks"],
+    include=["app.ingestion.tasks", "app.agent.tasks", "app.evaluation.tasks"],
 )
 celery_app.conf.update(
     task_track_started=True,

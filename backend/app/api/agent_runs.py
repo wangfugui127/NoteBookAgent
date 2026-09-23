@@ -4,13 +4,14 @@ import asyncio
 import json
 
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
 
+from app.agent.run_service import create_agent_run
 from app.agent.tasks import execute_agent_run_task
 from app.api.dependencies import CurrentUser, DbSession
 from app.core.database import SessionFactory
-from app.models import AgentRun, ApprovalRequest, Conversation, Message, RunEvent, RunStatus
+from app.models import AgentRun, ApprovalRequest, Conversation, RunEvent, RunStatus
 from app.schemas import AgentRunCreate, AgentRunView, ApprovalResolve
 
 router = APIRouter(tags=["agent"])
@@ -34,45 +35,15 @@ async def create_run(payload: AgentRunCreate, db: DbSession, user: CurrentUser) 
     )
     if not conversation:
         raise HTTPException(404, "conversation not found")
-    input_message = Message(
-        conversation_id=conversation.id,
-        role="user",
-        content=payload.query,
-        attachments=[
-            {
-                "document_id": value,
-                "instruction": payload.attachment_instructions.get(value, ""),
-            }
-            for value in payload.attachment_ids
-        ],
-    )
-    db.add(input_message)
-    await db.flush()
-    message_count = await db.scalar(
-        select(func.count(Message.id)).where(Message.conversation_id == conversation.id)
-    )
-    if (message_count or 0) <= 1 and (conversation.title or "").strip() in {
-        "",
-        "New conversation",
-        "研究对话",
-    }:
-        conversation.title = payload.query.strip()[:30] or conversation.title
-    approval_mode = payload.approval_mode or user.approval_mode or "confirm"
-    run = AgentRun(
-        conversation_id=conversation.id,
-        user_id=user.id,
-        notebook_id=conversation.notebook_id,
+    run = await create_agent_run(
+        db,
+        user=user,
+        conversation=conversation,
         query=payload.query,
         attachment_ids=payload.attachment_ids,
-        state={
-            "attachment_instructions": payload.attachment_instructions,
-            "input_message_id": input_message.id,
-            "approval_mode": approval_mode,
-        },
+        attachment_instructions=payload.attachment_instructions,
+        approval_mode=payload.approval_mode,
     )
-    db.add(run)
-    await db.commit()
-    await db.refresh(run)
     execute_agent_run_task.delay(run.id)
     return run
 

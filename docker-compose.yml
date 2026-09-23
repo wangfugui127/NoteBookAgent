@@ -10,6 +10,7 @@ x-backend: &backend
       required: false
   volumes:
     - uploads:/data/uploads
+    - mcp-uv-cache:/root/.cache/uv
     - ./config:/app/config:ro
     - ./skills:/app/skills:ro
   depends_on:
@@ -159,3 +160,4 @@ volumes:
   milvus-data:
   neo4j-data:
   uploads:
+  mcp-uv-cache:

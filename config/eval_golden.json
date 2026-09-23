@@ -1,0 +1,76 @@
+{
+  "name": "Presto · AEF 事实性评测",
+  "description": "针对 Presto（2304.14065v4）与 AlphaEarth Foundations（2507.22291v2）的事实性问答。运行前请确保目标 Notebook 已上传并解析这两个 PDF，且文档标题与文件名一致。",
+  "cases": [
+    {
+      "case_key": "presto-pretrain-data",
+      "question": "Presto 的预训练数据集包含多少像素样本？空间分辨率、时间长度和数据覆盖年份分别是什么？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2304.14065v4.pdf"],
+      "required_keywords": ["21.5M", "10m", "12个月", "2020", "2021"]
+    },
+    {
+      "case_key": "presto-masking-strategies",
+      "question": "Presto 预训练使用了哪四种结构化掩码策略？这些策略主要解决什么问题？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2304.14065v4.pdf"],
+      "required_keywords": ["Random", "Channel-groups", "Contiguous timesteps", "Timesteps", "缺失输入"]
+    },
+    {
+      "case_key": "presto-input-products",
+      "question": "Presto 预训练使用了哪些动态数据产品和静态数据产品？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2304.14065v4.pdf"],
+      "required_keywords": ["Sentinel-2", "Sentinel-1", "ERA5", "NDVI", "Dynamic World", "SRTM", "位置坐标"]
+    },
+    {
+      "case_key": "presto-cropharvest-results",
+      "question": "PrestoR、TIML 和 MOSAIKS-1DR 在 CropHarvest 任务上的平均 F1 分别是多少？PrestoR 需要适配多少参数？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2304.14065v4.pdf"],
+      "required_keywords": ["0.835", "0.802", "0.738", "129"]
+    },
+    {
+      "case_key": "aef-released-dataset",
+      "question": "AlphaEarth Foundations 发布的全球嵌入场覆盖哪些年份？空间分辨率、嵌入层数和向量空间分别是什么？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2507.22291v2.pdf"],
+      "required_keywords": ["2017", "2024", "10m", "64", "S63", "单位球"]
+    },
+    {
+      "case_key": "aef-valid-support-period",
+      "question": "AEF 中的 valid period 和 support period 分别表示什么？两者是否必须完全重合？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2507.22291v2.pdf"],
+      "required_keywords": ["valid period", "support period", "不必完全相交", "插值", "外推"]
+    },
+    {
+      "case_key": "aef-evaluation-method",
+      "question": "AEF 的分类任务和回归任务分别使用什么误差指标？论文比较了哪些迁移方法？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2507.22291v2.pdf"],
+      "required_keywords": ["BER", "MAE", "kNN k=1", "kNN k=3", "linear"]
+    },
+    {
+      "case_key": "aef-efficiency-advantage",
+      "question": "AEF 相比下一最佳方法，平均误差和单个表示的信息量分别有怎样的改进？请给出引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2507.22291v2.pdf"],
+      "required_keywords": ["23.9%", "1.4", "16", "64 bytes"]
+    },
+    {
+      "case_key": "compare-presto-aef",
+      "question": "比较 Presto 与 AlphaEarth Foundations 的输入形式、时间建模方式、输出表示和主要应用场景，并分别给出两篇论文的引用。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2304.14065v4.pdf", "2507.22291v2.pdf"],
+      "required_keywords": ["像素时间序列", "多传感器", "掩码自编码", "嵌入场", "年度", "下游任务"]
+    },
+    {
+      "case_key": "unsupported-future-claim",
+      "question": "这两篇论文是否证明了 Presto 或 AEF 能准确预测 2028 年全球粮食产量？请严格根据论文证据回答。",
+      "expected_tools": ["search_notebook"],
+      "expected_source_titles": ["2304.14065v4.pdf", "2507.22291v2.pdf"],
+      "required_keywords": ["未提供", "无法证明"]
+    }
+  ]
+}

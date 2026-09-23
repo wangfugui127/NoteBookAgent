@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
+import EvaluationView from './views/EvaluationView.vue'
 import LoginView from './views/LoginView.vue'
 import NotebooksView from './views/NotebooksView.vue'
 import WorkspaceView from './views/WorkspaceView.vue'
@@ -14,6 +15,7 @@ const router = createRouter({
     { path: '/login', component: LoginView },
     { path: '/notebooks', component: NotebooksView },
     { path: '/notebooks/:id', component: WorkspaceView },
+    { path: '/evaluations', component: EvaluationView },
   ],
 })
 

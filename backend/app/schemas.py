@@ -93,3 +93,101 @@ class ContextManifestView(BaseModel):
     layers: dict[str, int]
     attachments: list[dict[str, Any]]
     omissions: list[dict[str, Any]]
+
+
+class EvalCaseInput(BaseModel):
+    case_key: str = ""
+    question: str = Field(min_length=1)
+    expected_tools: list[str] = Field(default_factory=list)
+    expected_source_titles: list[str] = Field(default_factory=list)
+    required_keywords: list[str] = Field(default_factory=list)
+
+
+class EvalCaseUpdate(BaseModel):
+    case_key: str | None = None
+    question: str | None = Field(default=None, min_length=1)
+    expected_tools: list[str] | None = None
+    expected_source_titles: list[str] | None = None
+    required_keywords: list[str] | None = None
+
+
+class EvalDatasetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str = ""
+
+
+class EvalDatasetUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+
+
+class EvalImportRequest(BaseModel):
+    cases: list[EvalCaseInput] = Field(default_factory=list)
+    replace: bool = False
+
+
+class EvalRunCreate(BaseModel):
+    notebook_id: str
+    allow_missing: bool = False
+
+
+class EvalCaseView(ORMModel):
+    id: str
+    case_key: str
+    question: str
+    expected_tools: list[str]
+    expected_source_titles: list[str]
+    required_keywords: list[str]
+    ordinal: int
+
+
+class EvalDatasetView(ORMModel):
+    id: str
+    name: str
+    description: str
+    created_at: datetime
+
+
+class EvalDatasetDetail(EvalDatasetView):
+    cases: list[EvalCaseView]
+
+
+class EvalRunView(ORMModel):
+    id: str
+    notebook_id: str
+    dataset_id: str | None
+    dataset_name: str
+    status: str
+    total_cases: int
+    completed_cases: int
+    passed_cases: int
+    current_case_key: str | None
+    metrics: dict[str, Any]
+    error_message: str | None
+    created_at: datetime
+
+
+class EvalCaseResultView(ORMModel):
+    id: str
+    case_key: str
+    ordinal: int
+    question: str
+    status: str
+    expected_tools: list[str]
+    actual_tools: list[str]
+    expected_source_titles: list[str]
+    matched_sources: list[str]
+    missing_sources: list[str]
+    required_keywords: list[str]
+    matched_keywords: list[str]
+    answer: str | None
+    route_score: float | None
+    retrieval_score: float | None
+    citation_score: float | None
+    keyword_score: float | None
+    total_score: float | None
+    passed: bool
+    latency_ms: int | None
+    agent_run_id: str | None
+    error_message: str | None
+    detail: dict[str, Any]

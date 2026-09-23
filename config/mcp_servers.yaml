@@ -1,4 +1,30 @@
-servers: []
+servers:
+  - id: semantic-scholar
+    enabled: true
+    transport: stdio
+    command: uvx
+    args:
+      - --from
+      - semantic-scholar-mcp==0.4.0
+      - --with
+      - mcp<2
+      - semantic-scholar-mcp
+    env:
+      SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY}
+    allowed_tools:
+      - search_papers
+      - search_papers_match
+      - search_snippets
+      - get_paper
+      - get_paper_authors
+      - get_paper_citations
+      - get_paper_references
+      - get_recommendations_for_paper
+      - batch_get_papers
+      - search_authors
+      - get_author
+      - get_author_papers
+    default_risk: read
 
 # Example remote server:
 # servers:

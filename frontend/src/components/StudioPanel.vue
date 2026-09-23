@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useNotes } from '../composables/useNotes'
 import { useTools } from '../composables/useTools'
 import type { Citation, TraceItem } from '../types'
 
@@ -17,16 +16,14 @@ const emit = defineEmits<{
   collapse: []
 }>()
 
-const { notes } = useNotes(props.notebookId)
 const tools = useTools()
 
-type TabId = 'evidence' | 'trace' | 'notes' | 'tools'
+type TabId = 'evidence' | 'trace' | 'tools'
 const activeTab = ref<TabId>('evidence')
 
 const tabs = computed(() => [
   { id: 'evidence' as const, label: '证据', count: props.citations.length },
   { id: 'trace' as const, label: '轨迹', count: props.trace.length },
-  { id: 'notes' as const, label: '备注', count: 0 },
   { id: 'tools' as const, label: '工具', count: tools.servers.value.length + tools.skills.value.length },
 ])
 
@@ -114,12 +111,6 @@ function locator(citation: Citation) {
           </li>
         </ol>
         <p v-else class="empty-note">工具调用、上下文窗口和审批状态会按顺序记录。</p>
-      </section>
-
-      <section v-else-if="activeTab === 'notes'" class="studio__section notes">
-        <h2>备注</h2>
-        <textarea v-model="notes" class="textarea" placeholder="记录阅读线索、待验证假设、下一步问题……" />
-        <p class="notes__hint">仅保存在当前浏览器（localStorage），不会同步到账号。</p>
       </section>
 
       <section v-else class="studio__section">

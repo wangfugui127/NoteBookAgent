@@ -9,6 +9,7 @@ from app.api import (
     agent_runs,
     auth,
     conversations,
+    evaluations,
     notebooks,
     papers,
     runtime_config,
@@ -60,6 +61,7 @@ for router in (
     conversations.router,
     papers.router,
     agent_runs.router,
+    evaluations.router,
     runtime_config.router,
 ):
     app.include_router(router, prefix="/api/v1")

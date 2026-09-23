@@ -193,7 +193,10 @@ async function onSelectConversation(id: string) {
 }
 
 async function onDeleteConversation(id: string) {
-  if (running.value) return
+  if (running.value) {
+    push('对话正在运行，请先停止', 'error')
+    return
+  }
   resetViewState()
   try {
     await removeConversation(id)

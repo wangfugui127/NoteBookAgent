@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     mcp_servers_config: Path = Path("../config/mcp_servers.yaml")
     mcp_expose_config: Path = Path("../config/mcp_expose.yaml")
     skills_config: Path = Path("../config/skills.yaml")
+    eval_golden_path: Path = Path("../config/eval_golden.json")
     run_live_provider_tests: bool = False
 
     @computed_field
