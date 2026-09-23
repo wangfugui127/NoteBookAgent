@@ -10,12 +10,13 @@ from app.celery_app import celery_app
 from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.ingestion.chunker import SectionDraft, chunk_document, detect_sections
-from app.ingestion.graph_extract import extract_graph_batch
-from app.ingestion.parser import parse_document
+from app.ingestion.graph_extract import extract_section_graph
+from app.ingestion.parser import PARSER_NAME, PARSER_VERSION, parse_document
 from app.ingestion.profile import build_document_profile
 from app.models import (
     Chunk,
     Document,
+    DocumentBlock,
     DocumentProfile,
     DocumentVersion,
     IngestionJob,
@@ -27,11 +28,26 @@ from app.retrieval.milvus import MilvusStore
 from app.retrieval.neo4j_store import Neo4jStore
 
 logger = logging.getLogger(__name__)
-GRAPH_BATCH_SIZE = 4
+GRAPH_SECTION_CHUNK_LIMIT = 8
+GRAPH_SEGMENT_CHARS = 4000
+
+
+def _section_for(
+    sections: list[tuple[SectionDraft, Section]], start: int, end: int
+) -> Section:
+    midpoint = (start + end) // 2
+    return next(
+        (
+            section
+            for draft, section in sections
+            if draft.char_start <= midpoint < draft.char_end
+        ),
+        sections[-1][1],
+    )
 
 
 async def ingest_document_version(document_version_id: str) -> None:
-    """Parse, chunk, profile and index a document, then hand off graph building."""
+    """Parse, structure, chunk, profile and index a document, then build the graph."""
     settings = get_settings()
     async with SessionFactory() as db:
         row = (
@@ -52,8 +68,14 @@ async def ingest_document_version(document_version_id: str) -> None:
             drafts = chunk_document(parsed)
             section_drafts = detect_sections(parsed)
             version.full_text = parsed.text
+            version.normalized_markdown = parsed.markdown
+            version.parser_name = PARSER_NAME
+            version.parser_version = PARSER_VERSION
             await db.execute(delete(Chunk).where(Chunk.document_version_id == version.id))
             await db.execute(delete(Section).where(Section.document_version_id == version.id))
+            await db.execute(
+                delete(DocumentBlock).where(DocumentBlock.document_version_id == version.id)
+            )
             sections: list[tuple[SectionDraft, Section]] = []
             for draft in section_drafts:
                 section = Section(
@@ -66,17 +88,34 @@ async def ingest_document_version(document_version_id: str) -> None:
                 db.add(section)
                 sections.append((draft, section))
             await db.flush()
+
+            block_rows: list[tuple[int, int, DocumentBlock]] = []
+            for ordinal, block in enumerate(parsed.blocks):
+                section = _section_for(sections, block.char_start, block.char_end)
+                row = DocumentBlock(
+                    document_version_id=version.id,
+                    section_id=section.id,
+                    ordinal=ordinal,
+                    block_type=block.kind,
+                    text=block.text,
+                    markdown=block.markdown,
+                    page_number=block.page_number,
+                    bbox=list(block.bbox),
+                    char_start=block.char_start,
+                    char_end=block.char_end,
+                )
+                db.add(row)
+                block_rows.append((block.char_start, block.char_end, row))
+            await db.flush()
+
             chunks: list[Chunk] = []
             for draft in drafts:
-                midpoint = (draft.char_start + draft.char_end) // 2
-                section = next(
-                    (
-                        item
-                        for section_draft, item in sections
-                        if section_draft.char_start <= midpoint < section_draft.char_end
-                    ),
-                    sections[-1][1],
-                )
+                section = _section_for(sections, draft.char_start, draft.char_end)
+                block_ids = [
+                    block.id
+                    for start, end, block in block_rows
+                    if end > draft.char_start and start < draft.char_end
+                ]
                 chunk = Chunk(
                     document_version_id=version.id,
                     section_id=section.id,
@@ -87,6 +126,8 @@ async def ingest_document_version(document_version_id: str) -> None:
                     char_end=draft.char_end,
                     content=draft.content,
                     content_hash=draft.content_hash,
+                    chunk_type=draft.chunk_type,
+                    block_ids=block_ids,
                 )
                 db.add(chunk)
                 chunks.append(chunk)
@@ -168,6 +209,8 @@ async def ingest_document_version(document_version_id: str) -> None:
                     "language": version.language,
                     "page_start": chunk.page_start or 0,
                     "page_end": chunk.page_end or 0,
+                    "chunk_type": chunk.chunk_type,
+                    "block_ids": chunk.block_ids,
                     "content": chunk.content,
                     "dense": vector,
                     "is_active": True,
@@ -194,7 +237,6 @@ async def ingest_document_version(document_version_id: str) -> None:
                     ],
                 )
 
-            # Text retrieval is complete; graph building runs as a separate task.
             version.status = "ready"
             version.graph_status = "pending"
             document.active_version_id = version.id
@@ -215,7 +257,7 @@ async def ingest_document_version(document_version_id: str) -> None:
 
 
 async def build_graph_index(document_version_id: str) -> None:
-    """Build the Neo4j graph for a ready document. Never fails the document."""
+    """Build the Experiment evidence graph one section at a time. Never fails the document."""
     settings = get_settings()
     async with SessionFactory() as db:
         row = (
@@ -226,10 +268,14 @@ async def build_graph_index(document_version_id: str) -> None:
             )
         ).one()
         version, document = row
+        graph_provider = DeepSeekProvider(settings) if settings.deepseek_api_key else None
+        if graph_provider is None:
+            version.graph_status = "skipped"
+            await db.commit()
+            return
         version.graph_status = "building"
         await db.commit()
         graph = Neo4jStore(settings)
-        graph_provider = DeepSeekProvider(settings) if settings.deepseek_api_key else None
         try:
             if not await graph.verify():
                 raise RuntimeError("Neo4j is unavailable")
@@ -258,28 +304,37 @@ async def build_graph_index(document_version_id: str) -> None:
                     )
                 ).all()
             }
-            previous_chunk_id: str | None = None
-            for start in range(0, len(chunks), GRAPH_BATCH_SIZE):
-                batch = chunks[start : start + GRAPH_BATCH_SIZE]
-                extracted = await extract_graph_batch(
-                    [chunk.content for chunk in batch],
-                    graph_provider,
-                    settings.deepseek_model,
+            grouped: dict[str, list[Chunk]] = {}
+            order: list[str] = []
+            for chunk in chunks:
+                key = chunk.section_id or "document"
+                if key not in grouped:
+                    grouped[key] = []
+                    order.append(key)
+                if len(grouped[key]) < GRAPH_SECTION_CHUNK_LIMIT:
+                    grouped[key].append(chunk)
+            for section_id in order:
+                section_chunks = grouped[section_id]
+                if not section_chunks:
+                    continue
+                section_title = section_titles.get(section_id, "正文")
+                segments = [chunk.content[:GRAPH_SEGMENT_CHARS] for chunk in section_chunks]
+                extracted = await extract_section_graph(
+                    section_title, segments, graph_provider, settings.deepseek_model
                 )
-                for chunk, (entities, relations) in zip(batch, extracted, strict=True):
+                for chunk, (entities, relations) in zip(
+                    section_chunks, extracted, strict=True
+                ):
                     await graph.upsert_chunk(
                         document.notebook_id,
                         version.id,
+                        document.id,
+                        document.title,
                         chunk.id,
-                        {
-                            "id": chunk.section_id,
-                            "title": section_titles.get(chunk.section_id or "", ""),
-                        },
+                        {"id": section_id, "title": section_title},
                         entities,
                         relations,
-                        previous_chunk_id,
                     )
-                    previous_chunk_id = chunk.id
             version.graph_status = "ready"
             await db.commit()
         except Exception as exc:

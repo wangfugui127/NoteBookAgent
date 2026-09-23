@@ -19,7 +19,19 @@ RetrievalMode = Literal["hybrid", "hybrid_graph", "layered", "auto", "comprehens
 
 
 def should_expand_graph(query: str) -> bool:
-    signals = ("关系", "比较", "引用", "方法", "数据集", "指标", "支持", "反驳", "关联")
+    signals = (
+        "关系",
+        "比较",
+        "引用",
+        "方法",
+        "数据集",
+        "指标",
+        "实验",
+        "结果",
+        "支持",
+        "反驳",
+        "关联",
+    )
     return (
         any(signal in query for signal in signals)
         or len(re.findall(r"[A-Z][A-Za-z0-9-]{2,}", query)) >= 2
@@ -74,6 +86,8 @@ class RetrievalService:
                 section_id=chunk.section_id,
                 section_title=section.title if section else None,
                 ordinal=chunk.ordinal,
+                chunk_type=chunk.chunk_type,
+                block_ids=list(chunk.block_ids or []),
                 sources=["neo4j"],
             )
             for chunk, version, document, section in rows
@@ -81,9 +95,7 @@ class RetrievalService:
         hits.sort(key=lambda hit: ordered.get(hit.chunk_id, limit))
         return hits, False
 
-    async def _attach_sections(
-        self, db: AsyncSession, hits: list[SearchHit]
-    ) -> None:
+    async def _attach_sections(self, db: AsyncSession, hits: list[SearchHit]) -> None:
         missing = {hit.section_id for hit in hits if hit.section_id and not hit.section_title}
         if not missing:
             return
@@ -111,9 +123,7 @@ class RetrievalService:
             document_ids,
             limit,
         )
-        candidate_ids = list(
-            dict.fromkeys(str(hit["entity"]["document_id"]) for hit in hits)
-        )
+        candidate_ids = list(dict.fromkeys(str(hit["entity"]["document_id"]) for hit in hits))
         if document_ids:
             allowed = set(document_ids)
             candidate_ids = [item for item in candidate_ids if item in allowed]
@@ -147,15 +157,38 @@ class RetrievalService:
             elif mode == "layered":
                 layered_degraded = True
 
-        hybrid = await asyncio.to_thread(
-            self.milvus.hybrid_search,
-            query,
-            vector,
-            notebook_id,
-            candidate_documents,
-            None,
-            30,
-        )
+        # Always search the whole current notebook (never other users) as a
+        # fallback so a wrong paper-summary filter cannot hide evidence.
+        result_sets: list[tuple[str, list[SearchHit]]] = [
+            (
+                "hybrid",
+                await asyncio.to_thread(
+                    self.milvus.hybrid_search,
+                    query,
+                    vector,
+                    notebook_id,
+                    document_ids,
+                    None,
+                    30,
+                ),
+            )
+        ]
+        if layered_used:
+            result_sets.append(
+                (
+                    "layered",
+                    await asyncio.to_thread(
+                        self.milvus.hybrid_search,
+                        query,
+                        vector,
+                        notebook_id,
+                        candidate_documents,
+                        None,
+                        30,
+                    ),
+                )
+            )
+
         use_graph = mode in {"hybrid_graph", "comprehensive"} or (
             mode == "auto" and should_expand_graph(query)
         )
@@ -165,9 +198,10 @@ class RetrievalService:
         graph_degraded = False
         if graph_attempted:
             graph_hits, graph_degraded = await self._graph_hits(db, notebook_id, candidates, 30)
-        fused = reciprocal_rank_fusion(
-            [("hybrid", hybrid), *(([("neo4j", graph_hits)]) if graph_hits else [])], limit=30
-        )
+            if graph_hits:
+                result_sets.append(("neo4j", graph_hits))
+
+        fused = reciprocal_rank_fusion(result_sets, limit=30)
         reranked = await self.siliconflow.rerank(query, [item.text for item in fused], top_k)
         final: list[SearchHit] = []
         for entry in reranked:
@@ -183,11 +217,57 @@ class RetrievalService:
             "mode_used": "layered" if layered_used else "hybrid",
             "layered_used": layered_used,
             "layered_degraded": layered_degraded,
+            "fallback_full_notebook": True,
             "graph_attempted": graph_attempted,
             "graph_used": bool(graph_hits),
             "graph_degraded": graph_degraded,
             "items": [asdict(item) for item in final],
         }
+
+    async def graph_experiments(
+        self,
+        db: AsyncSession,
+        *,
+        notebook_id: str,
+        query: str,
+        limit: int = 10,
+    ) -> dict[str, object]:
+        if not await self.neo4j.verify():
+            return {"items": [], "degraded": True}
+        candidates = entity_candidates(query)
+        experiments = await self.neo4j.search_experiments(notebook_id, candidates, limit)
+        chunk_ids: list[str] = []
+        for experiment in experiments:
+            for group in ("methods", "datasets", "results", "metrics"):
+                for item in experiment.get(group) or []:
+                    for chunk_id in item.get("evidence") or []:
+                        if chunk_id not in chunk_ids:
+                            chunk_ids.append(chunk_id)
+        chunks: dict[str, dict[str, object]] = {}
+        if chunk_ids:
+            rows = (
+                await db.execute(
+                    select(Chunk, Document, Section)
+                    .join(DocumentVersion, Chunk.document_version_id == DocumentVersion.id)
+                    .join(Document, DocumentVersion.document_id == Document.id)
+                    .join(Section, Chunk.section_id == Section.id, isouter=True)
+                    .where(Chunk.id.in_(chunk_ids))
+                )
+            ).all()
+            chunks = {
+                chunk.id: {
+                    "chunk_id": chunk.id,
+                    "title": document.title,
+                    "section_title": section.title if section else None,
+                    "page_start": chunk.page_start,
+                    "page_end": chunk.page_end,
+                    "chunk_type": chunk.chunk_type,
+                    "block_ids": list(chunk.block_ids or []),
+                    "content": chunk.content,
+                }
+                for chunk, document, section in rows
+            }
+        return {"items": experiments, "chunks": chunks, "degraded": False}
 
     async def close(self) -> None:
         await self.siliconflow.close()

@@ -15,6 +15,8 @@ def _add_missing_columns(sync_connection) -> None:
             sync_connection.execute(
                 text("ALTER TABLE evidence ADD COLUMN section_title VARCHAR(512) NULL")
             )
+        if "block_ids" not in columns:
+            sync_connection.execute(text("ALTER TABLE evidence ADD COLUMN block_ids JSON NULL"))
     if inspector.has_table("document_versions"):
         columns = {column["name"] for column in inspector.get_columns("document_versions")}
         if "graph_status" not in columns:
@@ -24,6 +26,35 @@ def _add_missing_columns(sync_connection) -> None:
                     "ADD COLUMN graph_status VARCHAR(24) NOT NULL DEFAULT 'pending'"
                 )
             )
+        if "normalized_markdown" not in columns:
+            sync_connection.execute(
+                text("ALTER TABLE document_versions ADD COLUMN normalized_markdown LONGTEXT NULL")
+            )
+        if "parser_name" not in columns:
+            sync_connection.execute(
+                text(
+                    "ALTER TABLE document_versions "
+                    "ADD COLUMN parser_name VARCHAR(64) NOT NULL DEFAULT ''"
+                )
+            )
+        if "parser_version" not in columns:
+            sync_connection.execute(
+                text(
+                    "ALTER TABLE document_versions "
+                    "ADD COLUMN parser_version VARCHAR(24) NOT NULL DEFAULT '1'"
+                )
+            )
+    if inspector.has_table("chunks"):
+        columns = {column["name"] for column in inspector.get_columns("chunks")}
+        if "chunk_type" not in columns:
+            sync_connection.execute(
+                text(
+                    "ALTER TABLE chunks "
+                    "ADD COLUMN chunk_type VARCHAR(24) NOT NULL DEFAULT 'paragraph'"
+                )
+            )
+        if "block_ids" not in columns:
+            sync_connection.execute(text("ALTER TABLE chunks ADD COLUMN block_ids JSON NULL"))
     if inspector.has_table("users"):
         columns = {column["name"] for column in inspector.get_columns("users")}
         if "approval_mode" not in columns:

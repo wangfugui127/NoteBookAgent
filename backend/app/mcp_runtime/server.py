@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.security import decode_token
-from app.models import Chunk, Document, DocumentVersion, Notebook
+from app.models import Chunk, Document, DocumentVersion, Notebook, Section
 from app.providers.openalex import OpenAlexProvider
 from app.providers.siliconflow import SiliconFlowProvider
 from app.retrieval.milvus import MilvusStore
@@ -92,9 +92,10 @@ async def get_notebook_items(
     async with SessionFactory() as db:
         rows = (
             await db.execute(
-                select(Chunk, DocumentVersion, Document)
+                select(Chunk, DocumentVersion, Document, Section)
                 .join(DocumentVersion, Chunk.document_version_id == DocumentVersion.id)
                 .join(Document, DocumentVersion.document_id == Document.id)
+                .join(Section, Chunk.section_id == Section.id, isouter=True)
                 .where(
                     Chunk.id.in_(chunk_ids[:30]),
                     Chunk.is_active.is_(True),
@@ -108,11 +109,14 @@ async def get_notebook_items(
                 "chunk_id": chunk.id,
                 "document_version_id": version.id,
                 "title": document.title,
+                "section_title": section.title if section else None,
+                "chunk_type": chunk.chunk_type,
+                "block_ids": list(chunk.block_ids or []),
                 "page_start": chunk.page_start,
                 "page_end": chunk.page_end,
                 "content": chunk.content,
             }
-            for chunk, version, document in rows
+            for chunk, version, document, section in rows
         ]
     }
 

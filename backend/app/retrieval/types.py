@@ -14,4 +14,6 @@ class SearchHit:
     section_id: str | None = None
     section_title: str | None = None
     ordinal: int | None = None
+    chunk_type: str | None = None
+    block_ids: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)

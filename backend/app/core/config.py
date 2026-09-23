@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
 
     milvus_uri: str = "http://localhost:19530"
-    milvus_collection: str = "document_chunks_v2"
+    milvus_collection: str = "document_chunks_v3"
     milvus_document_collection: str = "notebook_documents_v1"
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

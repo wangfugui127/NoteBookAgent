@@ -4,57 +4,24 @@ import json
 import re
 from typing import Any
 
-from app.prompts.graph import GRAPH_EXTRACTION_SYSTEM_PROMPT
+from app.prompts.graph import GRAPH_EXTRACTION_SYSTEM_PROMPT, SECTION_GRAPH_SYSTEM_PROMPT
 from app.providers.deepseek import DeepSeekProvider
 
-ENTITY_PATTERN = re.compile(r"\b[A-Z][A-Za-z0-9_-]{2,}(?:\s+[A-Z][A-Za-z0-9_-]{2,}){0,3}\b")
-
-VALID_KINDS = {"Entity", "Method", "Dataset", "Metric", "Paper"}
+VALID_KINDS = {"Entity", "Method", "Dataset", "Metric", "Paper", "Experiment", "Result"}
 VALID_RELATIONS = {
+    "HAS_EXPERIMENT",
     "USES_METHOD",
     "USES_DATASET",
-    "MEASURES_METRIC",
+    "REPORTS_RESULT",
+    "MEASURES",
     "CITES",
     "COMPARES_WITH",
-    "SUPPORTS",
-    "CONTRADICTS",
     "RELATED_TO",
 }
 
 
-def _kind(name: str) -> str:
-    lower = name.lower()
-    if any(value in lower for value in ("dataset", "corpus", "benchmark")):
-        return "Dataset"
-    if any(value in lower for value in ("accuracy", "precision", "recall", "f1", "rouge")):
-        return "Metric"
-    if any(value in lower for value in ("model", "network", "transformer", "method")):
-        return "Method"
-    if any(value in lower for value in ("paper", "study", "survey")):
-        return "Paper"
-    return "Entity"
-
-
-def extract_graph_fallback(text: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Conservative no-key fallback; every edge still points to its evidence chunk."""
-    names = list(dict.fromkeys(match.group(0).strip() for match in ENTITY_PATTERN.finditer(text)))[
-        :20
-    ]
-    entities = [
-        {"key": name.lower().replace(" ", "-"), "name": name, "kind": _kind(name)} for name in names
-    ]
-    relations = [
-        {
-            "source": entities[index]["key"],
-            "target": entities[index + 1]["key"],
-            "kind": "RELATED_TO",
-            "confidence": 0.3,
-            "extractor_model": "heuristic",
-            "extractor_version": "1",
-        }
-        for index in range(len(entities) - 1)
-    ]
-    return entities, relations
+def _normalize_key(value: Any) -> str:
+    return str(value or "").strip().lower().replace(" ", "-")
 
 
 def _normalize_entities(raw: Any) -> list[dict[str, Any]]:
@@ -67,7 +34,7 @@ def _normalize_entities(raw: Any) -> list[dict[str, Any]]:
             item = {"key": item, "name": item, "kind": "Entity"}
         if not isinstance(item, dict):
             continue
-        key = str(item.get("key") or item.get("name") or "").strip().lower().replace(" ", "-")
+        key = _normalize_key(item.get("key") or item.get("name"))
         name = str(item.get("name") or item.get("key") or "").strip()
         if not key or not name or key in keys:
             continue
@@ -86,8 +53,8 @@ def _normalize_relations(raw: Any, keys: set[str], model_name: str) -> list[dict
     for item in raw:
         if not isinstance(item, dict):
             continue
-        source = str(item.get("source") or "").strip().lower().replace(" ", "-")
-        target = str(item.get("target") or "").strip().lower().replace(" ", "-")
+        source = _normalize_key(item.get("source"))
+        target = _normalize_key(item.get("target"))
         if source not in keys or target not in keys:
             continue
         kind = str(item.get("kind") or "RELATED_TO").upper()
@@ -132,8 +99,9 @@ async def extract_graph(
     provider: DeepSeekProvider | None,
     model_name: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    if provider is None:
-        return extract_graph_fallback(text)
+    """LLM-only extraction. A missing provider or malformed output yields an empty graph."""
+    if provider is None or not text.strip():
+        return [], []
     try:
         response = await provider.invoke(
             [
@@ -142,12 +110,9 @@ async def extract_graph(
             ],
             [],
         )
-        entities, relations = _parse_payload(_parse_json(response.content), model_name)
+        return _parse_payload(_parse_json(response.content), model_name)
     except Exception:
-        return extract_graph_fallback(text)
-    if not entities:
-        return extract_graph_fallback(text)
-    return entities, relations
+        return [], []
 
 
 async def extract_graph_batch(
@@ -155,15 +120,10 @@ async def extract_graph_batch(
     provider: DeepSeekProvider | None,
     model_name: str,
 ) -> list[tuple[list[dict[str, Any]], list[dict[str, Any]]]]:
-    """Extract entities/relations for several chunks in one model call.
-
-    Falls back to per-chunk extraction if the batched response is malformed.
-    """
-    if provider is None or len(texts) == 1:
+    """Extract entities/relations for several chunks in one model call."""
+    if provider is None or len(texts) <= 1:
         return [await extract_graph(text, provider, model_name) for text in texts]
-    segments = [
-        f"[片段 {index}]\n{text}" for index, text in enumerate(texts)
-    ]
+    segments = [f"[片段 {index}]\n{text}" for index, text in enumerate(texts)]
     payload = "\n\n".join(segments)
     instruction = (
         "下面有多个论文片段。请只返回一个 JSON 数组，数组每个元素形如 "
@@ -181,7 +141,7 @@ async def extract_graph_batch(
         )
         data = _parse_json(response.content)
         if not isinstance(data, list):
-            raise ValueError("batch response is not a list")
+            return [([], []) for _ in texts]
         grouped: dict[int, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
         for item in data:
             if not isinstance(item, dict):
@@ -192,12 +152,110 @@ async def extract_graph_batch(
                 continue
             if 0 <= index < len(texts):
                 grouped[index] = _parse_payload(item, model_name)
-        results: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
-        for index, text in enumerate(texts):
-            entities, relations = grouped.get(index, ([], []))
-            if not entities:
-                entities, relations = extract_graph_fallback(text)
-            results.append((entities, relations))
-        return results
+        return [grouped.get(index, ([], [])) for index in range(len(texts))]
     except Exception:
-        return [await extract_graph(text, provider, model_name) for text in texts]
+        return [([], []) for _ in texts]
+
+
+def _flatten_experiments(
+    items: Any, model_name: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    entities: list[dict[str, Any]] = []
+    relations: list[dict[str, Any]] = []
+    keys: set[str] = set()
+
+    def add(value: Any, kind: str, fallback: str = "") -> str | None:
+        if isinstance(value, dict):
+            key = _normalize_key(value.get("key") or value.get("name"))
+            name = str(value.get("name") or value.get("key") or "").strip() or fallback
+        else:
+            key = _normalize_key(value)
+            name = str(value or "").strip() or fallback
+        if not key or not name:
+            return None
+        if key not in keys:
+            keys.add(key)
+            entities.append({"key": key, "name": name, "kind": kind})
+        return key
+
+    def relate(source: str, target: str, kind: str) -> None:
+        relations.append(
+            {
+                "source": source,
+                "target": target,
+                "kind": kind,
+                "confidence": 0.7,
+                "extractor_model": model_name,
+                "extractor_version": "1",
+            }
+        )
+
+    if not isinstance(items, list):
+        return entities, relations
+    for experiment in items:
+        if not isinstance(experiment, dict):
+            continue
+        experiment_key = add(
+            experiment.get("key") or experiment.get("name"), "Experiment", "experiment"
+        )
+        if experiment_key is None:
+            continue
+        for method in experiment.get("methods") or []:
+            method_key = add(method, "Method")
+            if method_key:
+                relate(experiment_key, method_key, "USES_METHOD")
+        for dataset in experiment.get("datasets") or []:
+            dataset_key = add(dataset, "Dataset")
+            if dataset_key:
+                relate(experiment_key, dataset_key, "USES_DATASET")
+        for result in experiment.get("results") or []:
+            if not isinstance(result, dict):
+                result = {"name": result}
+            result_key = add(result.get("key") or result.get("name"), "Result", "result")
+            if result_key is None:
+                continue
+            relate(experiment_key, result_key, "REPORTS_RESULT")
+            metric = result.get("metric")
+            if metric:
+                metric_key = add(metric, "Metric")
+                if metric_key:
+                    relate(result_key, metric_key, "MEASURES")
+    return entities, relations
+
+
+async def extract_section_graph(
+    section_title: str,
+    segments: list[str],
+    provider: DeepSeekProvider | None,
+    model_name: str,
+) -> list[tuple[list[dict[str, Any]], list[dict[str, Any]]]]:
+    """Extract one section at a time so one experiment is not split into duplicates."""
+    if not segments:
+        return []
+    if provider is None:
+        return [([], []) for _ in segments]
+    payload = "\n\n".join(f"[片段 {index}]\n{text}" for index, text in enumerate(segments))
+    prompt = f"章节标题：{section_title}\n\n{payload}"
+    try:
+        response = await provider.invoke(
+            [
+                {"role": "system", "content": SECTION_GRAPH_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            [],
+        )
+        data = _parse_json(response.content)
+    except Exception:
+        return [([], []) for _ in segments]
+    grouped: dict[int, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            try:
+                index = int(item.get("index"))
+            except (TypeError, ValueError):
+                continue
+            if 0 <= index < len(segments):
+                grouped[index] = _flatten_experiments(item.get("experiments"), model_name)
+    return [grouped.get(index, ([], [])) for index in range(len(segments))]

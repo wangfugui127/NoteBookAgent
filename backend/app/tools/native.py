@@ -12,6 +12,7 @@ from app.models import (
     Document,
     DocumentVersion,
     ExternalPaperResult,
+    Section,
     TaskItem,
 )
 from app.tools.registry import ToolDefinition, ToolExecutionContext, ToolRegistry
@@ -127,9 +128,10 @@ async def get_items(args: GetItemsArgs, ctx: ToolExecutionContext) -> dict[str, 
     requested = set(args.chunk_ids)
     rows = (
         await ctx.db.execute(
-            select(Chunk, DocumentVersion, Document)
+            select(Chunk, DocumentVersion, Document, Section)
             .join(DocumentVersion, Chunk.document_version_id == DocumentVersion.id)
             .join(Document, DocumentVersion.document_id == Document.id)
+            .join(Section, Chunk.section_id == Section.id, isouter=True)
             .where(
                 Chunk.id.in_(requested),
                 Chunk.is_active.is_(True),
@@ -144,13 +146,16 @@ async def get_items(args: GetItemsArgs, ctx: ToolExecutionContext) -> dict[str, 
                 "document_version_id": version.id,
                 "document_id": document.id,
                 "title": document.title,
+                "section_title": section.title if section else None,
+                "chunk_type": chunk.chunk_type,
+                "block_ids": list(chunk.block_ids or []),
                 "page_start": chunk.page_start,
                 "page_end": chunk.page_end,
                 "char_start": chunk.char_start,
                 "char_end": chunk.char_end,
                 "content": chunk.content,
             }
-            for chunk, version, document in rows
+            for chunk, version, document, section in rows
             if ctx.allowed_document_ids is None or document.id in ctx.allowed_document_ids
         ]
     }

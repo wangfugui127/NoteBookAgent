@@ -343,6 +343,7 @@ class AgentRuntime:
                 page_end=item.get("page_end"),
                 char_start=item.get("char_start"),
                 char_end=item.get("char_end"),
+                block_ids=list(item.get("block_ids") or []),
                 retrieval_sources=list(item.get("sources") or [tool_name]),
                 score=item.get("score"),
             )
@@ -407,6 +408,7 @@ class AgentRuntime:
                     page_end=chunk.page_end,
                     char_start=chunk.char_start,
                     char_end=chunk.char_end,
+                    block_ids=list(chunk.block_ids or []),
                     retrieval_sources=["current_query_attachment"],
                 )
                 db.add(evidence)

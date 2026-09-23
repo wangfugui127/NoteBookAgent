@@ -56,6 +56,16 @@ def hit(chunk_id: str) -> SearchHit:
     )
 
 
+class RecordingMilvus(FakeMilvus):
+    def __init__(self) -> None:
+        super().__init__([{"entity": {"document_id": "doc-1"}}], [hit("c1")])
+        self.calls: list[list[str] | None] = []
+
+    def hybrid_search(self, query, vector, notebook_id, document_ids, section_ids, limit):
+        self.calls.append(document_ids)
+        return list(self.chunks)
+
+
 def service(docs, chunks) -> RetrievalService:
     return RetrievalService(FakeMilvus(docs, chunks), FakeNeo4j(), FakeSiliconFlow())
 
@@ -88,3 +98,18 @@ async def test_auto_uses_layered_when_profiles_exist() -> None:
         FakeDb(), notebook_id="nb", query="帮我总结", document_ids=None, mode="auto"
     )
     assert result["layered_used"] is True
+
+
+@pytest.mark.asyncio
+async def test_layered_still_searches_full_notebook_scope() -> None:
+    milvus = RecordingMilvus()
+    result = await RetrievalService(milvus, FakeNeo4j(), FakeSiliconFlow()).search(
+        FakeDb(),
+        notebook_id="nb",
+        query="q",
+        document_ids=["d1", "d2"],
+        mode="layered",
+    )
+    assert result["fallback_full_notebook"] is True
+    assert ["d1", "d2"] in milvus.calls
+    assert all(call is not None for call in milvus.calls)

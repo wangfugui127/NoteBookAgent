@@ -43,6 +43,8 @@ class MilvusStore:
         schema.add_field("language", DataType.VARCHAR, max_length=24)
         schema.add_field("page_start", DataType.INT64)
         schema.add_field("page_end", DataType.INT64)
+        schema.add_field("chunk_type", DataType.VARCHAR, max_length=24)
+        schema.add_field("block_ids", DataType.JSON)
         self._content_field(schema)
         schema.add_field("dense", DataType.FLOAT_VECTOR, dim=self.settings.embedding_dim)
         schema.add_field("sparse", DataType.SPARSE_FLOAT_VECTOR)
@@ -182,6 +184,8 @@ class MilvusStore:
                 "title",
                 "page_start",
                 "page_end",
+                "chunk_type",
+                "block_ids",
             ],
             "chunk_id",
         )
@@ -200,6 +204,8 @@ class MilvusStore:
                     ordinal=entity.get("ordinal"),
                     page_start=entity.get("page_start"),
                     page_end=entity.get("page_end"),
+                    chunk_type=entity.get("chunk_type"),
+                    block_ids=list(entity.get("block_ids") or []),
                     sources=["dense", "bm25"],
                 )
             )

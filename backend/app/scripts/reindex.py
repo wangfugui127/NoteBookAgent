@@ -64,6 +64,8 @@ async def reindex() -> None:
                                 "language": version.language,
                                 "page_start": chunk.page_start or 0,
                                 "page_end": chunk.page_end or 0,
+                                "chunk_type": chunk.chunk_type,
+                                "block_ids": list(chunk.block_ids or []),
                                 "content": chunk.content,
                                 "dense": vector,
                                 "is_active": True,

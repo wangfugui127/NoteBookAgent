@@ -4,7 +4,13 @@ import hashlib
 import re
 from dataclasses import dataclass
 
-from app.ingestion.parser import ParsedDocument
+from app.ingestion.parser import ParsedBlock, ParsedDocument
+
+CAPTION_PATTERN = re.compile(r"(?i)^(figure|table|fig\.?|tab\.?|图|表)\s*\d*")
+FORMULA_PATTERN = re.compile(r"\\[a-z]+|[\u2211\u222b\u221a\u00b1]|\^\{|_\{")
+AFFILIATION_PATTERN = re.compile(
+    r"(?i)(university|institute|college|laborator|inc\.|ltd\.|gmbh|school of|大学|学院|研究所)"
+)
 
 
 @dataclass(slots=True)
@@ -16,6 +22,8 @@ class ChunkDraft:
     page_start: int | None
     page_end: int | None
     content_hash: str
+    section_title: str = ""
+    chunk_type: str = "paragraph"
 
 
 @dataclass(slots=True)
@@ -26,6 +34,25 @@ class SectionDraft:
     char_end: int
     page_start: int | None
     page_end: int | None
+
+
+def infer_chunk_type(content: str) -> str:
+    stripped = content.strip()
+    if not stripped:
+        return "paragraph"
+    if CAPTION_PATTERN.match(stripped):
+        return "figure_caption"
+    lines = [line for line in stripped.splitlines() if line.strip()]
+    table_lines = sum(1 for line in lines if line.count("|") >= 2)
+    if table_lines >= 2 and table_lines >= len(lines) / 2:
+        return "table"
+    if FORMULA_PATTERN.search(stripped) and len(stripped) <= 400:
+        return "formula"
+    return "paragraph"
+
+
+def blocks_for_range(blocks: list[ParsedBlock], start: int, end: int) -> list[ParsedBlock]:
+    return [block for block in blocks if block.char_end > start and block.char_start < end]
 
 
 def _pages_for(parsed: ParsedDocument, start: int, end: int) -> tuple[int | None, int | None]:
@@ -40,10 +67,6 @@ MIN_SECTION_CHARS = 200
 
 MARKDOWN_HEADING = re.compile(r"(?m)^#{1,6}\s+(.+?)\s*$")
 NUMBERED_HEADING = re.compile(r"(?m)^(\d+(?:\.\d+){0,3})[.、]?\s+([^\n]{1,64})$")
-CAPTION_PATTERN = re.compile(r"(?i)^(figure|table|fig\.|tab\.|图|表)\s*\d*")
-AFFILIATION_PATTERN = re.compile(
-    r"(?i)(university|institute|college|laborator|inc\.|ltd\.|gmbh|school of)"
-)
 
 
 def _is_heading(title: str) -> bool:
@@ -72,9 +95,7 @@ def _build_sections(
         if end <= start:
             continue
         page_start, page_end = _pages_for(parsed, start, end)
-        sections.append(
-            SectionDraft(len(sections), title, start, end, page_start, page_end)
-        )
+        sections.append(SectionDraft(len(sections), title, start, end, page_start, page_end))
     merge_tiny = len(sections) > 8
     merged: list[SectionDraft] = []
     for section in sections:
@@ -130,40 +151,69 @@ def detect_sections(parsed: ParsedDocument) -> list[SectionDraft]:
     return _build_sections(parsed, numbered)
 
 
+def _split_section(
+    parsed: ParsedDocument,
+    section: SectionDraft,
+    ordinal: int,
+    max_chars: int,
+    overlap_chars: int,
+) -> list[ChunkDraft]:
+    text = parsed.text[section.char_start : section.char_end]
+    chunks: list[ChunkDraft] = []
+    local_start = 0
+    while local_start < len(text):
+        hard_end = min(len(text), local_start + max_chars)
+        end = hard_end
+        if hard_end < len(text):
+            boundary = max(
+                text.rfind("\n\n", local_start + max_chars // 2, hard_end),
+                text.rfind("。", local_start + max_chars // 2, hard_end),
+            )
+            if boundary > local_start:
+                end = boundary + 1
+        content = text[local_start:end]
+        char_start = section.char_start + local_start
+        char_end = section.char_start + end
+        page_start, page_end = _pages_for(parsed, char_start, char_end)
+        chunks.append(
+            ChunkDraft(
+                ordinal=ordinal + len(chunks),
+                content=content,
+                char_start=char_start,
+                char_end=char_end,
+                page_start=page_start,
+                page_end=page_end,
+                content_hash=hashlib.sha256(content.encode()).hexdigest(),
+                section_title=section.title,
+                chunk_type=infer_chunk_type(content),
+            )
+        )
+        if end >= len(text):
+            break
+        local_start = max(local_start + 1, end - overlap_chars)
+    return chunks
+
+
 def chunk_document(
     parsed: ParsedDocument, max_chars: int = 4000, overlap_chars: int = 300
 ) -> list[ChunkDraft]:
     if max_chars <= overlap_chars:
         raise ValueError("max_chars must be larger than overlap_chars")
-    text = parsed.text
+    sections = detect_sections(parsed)
     chunks: list[ChunkDraft] = []
-    start = 0
-    ordinal = 0
-    while start < len(text):
-        hard_end = min(len(text), start + max_chars)
-        end = hard_end
-        if hard_end < len(text):
-            boundary = max(
-                text.rfind("\n\n", start + max_chars // 2, hard_end),
-                text.rfind("。", start + max_chars // 2, hard_end),
-            )
-            if boundary > start:
-                end = boundary + 1
-        content = text[start:end]
-        page_start, page_end = _pages_for(parsed, start, end)
-        chunks.append(
-            ChunkDraft(
-                ordinal=ordinal,
-                content=content,
-                char_start=start,
-                char_end=end,
-                page_start=page_start,
-                page_end=page_end,
-                content_hash=hashlib.sha256(content.encode()).hexdigest(),
-            )
+    for section in sections:
+        chunks.extend(_split_section(parsed, section, len(chunks), max_chars, overlap_chars))
+    return [
+        ChunkDraft(
+            ordinal=index,
+            content=chunk.content,
+            char_start=chunk.char_start,
+            char_end=chunk.char_end,
+            page_start=chunk.page_start,
+            page_end=chunk.page_end,
+            content_hash=chunk.content_hash,
+            section_title=chunk.section_title,
+            chunk_type=chunk.chunk_type,
         )
-        ordinal += 1
-        if end >= len(text):
-            break
-        start = max(start + 1, end - overlap_chars)
-    return chunks
+        for index, chunk in enumerate(chunks)
+    ]

@@ -116,6 +116,9 @@ class DocumentVersion(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(40), default="pending", index=True)
     graph_status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     full_text: Mapped[str | None] = mapped_column(LONG_TEXT, nullable=True)
+    normalized_markdown: Mapped[str | None] = mapped_column(LONG_TEXT, nullable=True)
+    parser_name: Mapped[str] = mapped_column(String(64), default="")
+    parser_version: Mapped[str] = mapped_column(String(24), default="1")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     document: Mapped[Document] = relationship(back_populates="versions", foreign_keys=[document_id])
     __table_args__ = (UniqueConstraint("document_id", "version_number"),)
@@ -133,6 +136,24 @@ class Section(Base, TimestampMixin):
     page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class DocumentBlock(Base, TimestampMixin):
+    __tablename__ = "document_blocks"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    document_version_id: Mapped[str] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), index=True
+    )
+    section_id: Mapped[str | None] = mapped_column(ForeignKey("sections.id"), nullable=True)
+    ordinal: Mapped[int] = mapped_column(Integer)
+    block_type: Mapped[str] = mapped_column(String(24), index=True)
+    text: Mapped[str] = mapped_column(LONG_TEXT)
+    markdown: Mapped[str] = mapped_column(LONG_TEXT)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bbox: Mapped[list[float]] = mapped_column(JSON, default=list)
+    char_start: Mapped[int] = mapped_column(Integer, default=0)
+    char_end: Mapped[int] = mapped_column(Integer, default=0)
+    __table_args__ = (UniqueConstraint("document_version_id", "ordinal"),)
+
+
 class Chunk(Base, TimestampMixin):
     __tablename__ = "chunks"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -147,6 +168,8 @@ class Chunk(Base, TimestampMixin):
     char_end: Mapped[int] = mapped_column(Integer, default=0)
     content: Mapped[str] = mapped_column(LONG_TEXT)
     content_hash: Mapped[str] = mapped_column(String(64))
+    chunk_type: Mapped[str] = mapped_column(String(24), default="paragraph", index=True)
+    block_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     __table_args__ = (UniqueConstraint("document_version_id", "ordinal"),)
 
@@ -281,6 +304,7 @@ class Evidence(Base, TimestampMixin):
     page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     char_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
     char_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    block_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     retrieval_sources: Mapped[list[str]] = mapped_column(JSON, default=list)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
 

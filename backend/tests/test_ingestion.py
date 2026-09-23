@@ -1,7 +1,20 @@
 from pathlib import Path
 
-from app.ingestion.chunker import chunk_document, detect_sections
-from app.ingestion.parser import ParsedDocument, ParsedPage, parse_document
+from app.ingestion.chunker import (
+    blocks_for_range,
+    chunk_document,
+    detect_sections,
+    infer_chunk_type,
+)
+from app.ingestion.parser import (
+    BLOCK_FIGURE_CAPTION,
+    BLOCK_HEADING,
+    BLOCK_TABLE,
+    ParsedDocument,
+    ParsedPage,
+    parse_document,
+    parse_text_blocks,
+)
 
 
 def test_chunker_covers_document_and_preserves_page_bounds() -> None:
@@ -59,3 +72,31 @@ def test_octet_stream_without_filename_accepts_utf8_text(tmp_path: Path) -> None
     parsed = parse_document(path, "application/octet-stream")
     assert parsed.text.startswith("# 方法")
     assert parsed.pages[0].char_end == len(parsed.text)
+
+
+def test_text_blocks_detect_structure_and_offsets() -> None:
+    text = (
+        "# 方法\n正文内容。\n\n"
+        "| A | B |\n| --- | --- |\n| 1 | 2 |\n\n"
+        "Figure 1: 示例\n"
+    )
+    blocks = parse_text_blocks(text)
+    kinds = {block.kind for block in blocks}
+    assert BLOCK_HEADING in kinds
+    assert BLOCK_TABLE in kinds
+    assert BLOCK_FIGURE_CAPTION in kinds
+    for block in blocks:
+        assert text[block.char_start : block.char_end].strip()
+
+
+def test_infer_chunk_type_distinguishes_table_caption_paragraph() -> None:
+    assert infer_chunk_type("| A | B |\n| --- | --- |\n| 1 | 2 |") == "table"
+    assert infer_chunk_type("Figure 1: 示例说明") == "figure_caption"
+    assert infer_chunk_type("这是一段普通正文。") == "paragraph"
+
+
+def test_blocks_for_range_selects_overlapping_blocks() -> None:
+    blocks = parse_text_blocks("# A\n第一段。\n\n# B\n第二段。\n")
+    selected = blocks_for_range(blocks, 0, 4)
+    assert selected
+    assert all(block.char_start < 4 for block in selected)
