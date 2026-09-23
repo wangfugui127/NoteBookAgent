@@ -8,4 +8,6 @@
 - 验证：`npm run build`（含 `vue-tsc` 类型检查）与 `npm run lint` 必须通过。
 
 ## 后端（backend/）
-- 不在本任务范围内，保持不动。
+- 允许按功能需要修改；删除类接口必须按 `owner_id` / `user_id` 校验归属，并做级联清理（DB + Milvus + Neo4j，外部存储失败不阻塞 DB 删除）。
+- 验证：`uv run ruff check .` 与 `uv run pytest -q`（在 `backend/` 下）必须通过。
+

@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from app.agent.context_builder import estimate_tokens
+from app.agent.messages import clear_old_tool_results, sanitize_messages
 from app.core.config import Settings
 from app.prompts.agent import CONTEXT_COMPACT_SYSTEM_PROMPT, context_compact_prompt
 
@@ -79,19 +80,17 @@ class ContextCompactor:
         systems, convo = self._partition(current)
         older, recent = self._recent_split(systems, convo, keep)
 
-        cleared = False
-        for item in older:
-            if item.get("role") == "tool" and not str(item.get("content") or "").startswith(
-                '{"truncated"'
-            ):
-                item["content"] = '{"truncated":true,"note":"旧工具结果已清理，原文在数据库"}'
-                cleared = True
+        older, cleared = clear_old_tool_results(
+            older, self.settings.context_keep_recent_tool_results
+        )
         if cleared:
-            omissions.append({"layer": "messages", "reason": "0.6: cleared old tool results"})
+            omissions.append(
+                {"layer": "messages", "reason": "0.6: cleared old tool result contents"}
+            )
         current = [*older, *recent]
 
         if estimate_tokens(str(current)) < summary_threshold:
-            return current, omissions, None
+            return sanitize_messages(current), omissions, None
 
         systems, convo = self._partition(current)
         older, recent = self._recent_split(systems, convo, keep)
@@ -105,8 +104,8 @@ class ContextCompactor:
                 latest = self._flatten(turns[-1:])
                 compacted = [*systems, *latest]
                 omissions.append({"layer": "messages", "reason": "0.75: dropped old turns"})
-                return compacted, omissions, None
-            return current, omissions, None
+                return sanitize_messages(compacted), omissions, None
+            return sanitize_messages(current), omissions, None
         previous_summary = " ".join(
             str(item.get("content") or "")
             for item in systems
@@ -128,7 +127,7 @@ class ContextCompactor:
             )
         except Exception:
             omissions.append({"layer": "messages", "reason": "0.75: summary failed, kept as is"})
-            return current, omissions, None
+            return sanitize_messages(current), omissions, None
 
         prompt_systems = [
             item
@@ -148,4 +147,4 @@ class ContextCompactor:
                     {"layer": "messages", "reason": "0.75: trimmed turns after summary"}
                 )
         omissions.append({"layer": "messages", "reason": "0.75: older turns summarized"})
-        return compacted, omissions, response.content
+        return sanitize_messages(compacted), omissions, response.content

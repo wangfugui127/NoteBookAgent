@@ -14,7 +14,7 @@ defineEmits<{
   toggle: [id: string]
   select: [id: string]
   add: []
-  close: []
+  collapse: []
 }>()
 
 const filter = ref('')
@@ -31,8 +31,19 @@ const readyCount = computed(() => props.documents.filter((doc) => doc.status ===
 <template>
   <aside class="panel panel--sources" :class="{ 'is-open': open }">
     <header class="panel__head">
-      <h2 class="panel__title">来源</h2>
-      <span class="panel__count">{{ readyCount }} / {{ documents.length }} 可用</span>
+      <div class="panel__head-group">
+        <h2 class="panel__title">来源</h2>
+        <span class="panel__count">{{ readyCount }} / {{ documents.length }} 可用</span>
+      </div>
+      <button
+        class="icon-btn icon-btn--ghost"
+        type="button"
+        aria-label="收起来源面板"
+        title="收起来源"
+        @click="$emit('collapse')"
+      >
+        «
+      </button>
     </header>
 
     <div class="sources__toolbar">

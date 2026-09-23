@@ -61,6 +61,7 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(512))
     display_name: Mapped[str] = mapped_column(String(120), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    approval_mode: Mapped[str] = mapped_column(String(16), default="confirm")
 
 
 class RefreshToken(Base, TimestampMixin):
@@ -310,6 +311,8 @@ class ApprovalRequest(Base, TimestampMixin):
     tool_call_id: Mapped[str] = mapped_column(ForeignKey("tool_calls.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(24), default="pending")
     reason: Mapped[str] = mapped_column(Text)
+    mode: Mapped[str] = mapped_column(String(16), default="confirm")
+    tool_risk: Mapped[str] = mapped_column(String(16), default="write")
     resolved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 

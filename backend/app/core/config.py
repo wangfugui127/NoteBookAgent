@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     context_trim_threshold: float = Field(default=0.6, gt=0.1, le=1.0)
     context_summary_threshold: float = Field(default=0.75, gt=0.1, le=1.0)
     context_keep_recent_turns: int = Field(default=6, ge=1, le=50)
+    context_keep_recent_tool_results: int = Field(default=4, ge=0, le=50)
     history_recent_runs: int = Field(default=8, ge=1, le=50)
 
     siliconflow_base_url: str = "https://api.siliconflow.cn/v1"

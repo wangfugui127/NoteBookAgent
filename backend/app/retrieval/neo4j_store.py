@@ -139,5 +139,16 @@ class Neo4jStore:
             )
             return [record["chunk_id"] async for record in result]
 
+    async def delete_document_version(self, document_version_id: str) -> None:
+        async with self.driver.session() as session:
+            await session.run(
+                """
+                MATCH (d:DocumentVersion {id: $document_version_id})
+                OPTIONAL MATCH (d)-[:HAS_SECTION|HAS_CHUNK]->(child)
+                DETACH DELETE child, d
+                """,
+                document_version_id=document_version_id,
+            )
+
     async def close(self) -> None:
         await self.driver.close()

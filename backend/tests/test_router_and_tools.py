@@ -21,7 +21,18 @@ def test_unknown_and_write_mcp_tools_require_approval() -> None:
     registry = build_native_registry()
     assert registry.requires_approval("missing-tool")
     assert not registry.requires_approval("search_notebook")
-    assert len(registry.schemas(list(registry.definitions))) == 9
+    assert len(registry.schemas(list(registry.definitions))) == 11
+
+
+def test_permission_mode_matrix() -> None:
+    registry = build_native_registry()
+    assert registry.decide("search_notebook", "read_only") == "allow"
+    assert registry.decide("add_paper_to_notebook", "read_only") == "deny"
+    assert registry.decide("add_paper_to_notebook", "confirm") == "approve"
+    assert registry.decide("add_paper_to_notebook", "auto") == "allow"
+    assert registry.decide("remove_notebook_source", "confirm") == "approve"
+    assert registry.decide("remove_notebook_source", "auto") == "allow"
+    assert registry.decide("remove_notebook_source", "read_only") == "deny"
 
 
 def test_provider_alias_keeps_dotted_mcp_name_internal() -> None:

@@ -2,10 +2,18 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
-from app.models import Chunk, Document, DocumentVersion, TaskItem
+from app.ingestion.sources import create_source, delete_source
+from app.models import (
+    Chunk,
+    Document,
+    DocumentVersion,
+    ExternalPaperResult,
+    TaskItem,
+)
 from app.tools.registry import ToolDefinition, ToolExecutionContext, ToolRegistry
 
 
@@ -53,6 +61,15 @@ class ToolSearchArgs(BaseModel):
 class ReadMcpResourceArgs(BaseModel):
     server_id: str
     uri: str
+
+
+class AddPapersArgs(BaseModel):
+    paper_ids: list[str] = Field(min_length=1, max_length=10)
+    instruction: str = ""
+
+
+class RemoveSourcesArgs(BaseModel):
+    document_ids: list[str] = Field(min_length=1, max_length=20)
 
 
 async def task_update(args: TaskUpdateArgs, ctx: ToolExecutionContext) -> dict[str, Any]:
@@ -178,6 +195,101 @@ async def read_mcp_resource(args: ReadMcpResourceArgs, ctx: ToolExecutionContext
     return await ctx.mcp.read_resource(args.server_id, args.uri)
 
 
+def _paper_markdown(detail: dict[str, Any]) -> str:
+    authors = ", ".join(detail.get("authors") or [])
+    lines = [
+        f"# {detail.get('title') or 'Untitled'}",
+        f"Authors: {authors or 'unknown'}",
+        f"Year: {detail.get('year') or 'unknown'}",
+        f"OpenAlex ID: {detail.get('paper_id') or ''}",
+        f"DOI: {detail.get('doi') or 'n/a'}",
+        f"URL: {detail.get('url') or 'n/a'}",
+        "",
+        "## Abstract",
+        str(detail.get("abstract") or "OpenAlex did not provide an abstract for this paper."),
+        "",
+        "> 本来源仅包含外部元数据与摘要，不是论文全文。",
+    ]
+    return "\n".join(lines)
+
+
+async def _fetch_pdf(url: str) -> bytes:
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        content = response.content
+        if not (content[:5] == b"%PDF-" or url.lower().endswith(".pdf")):
+            raise ValueError("downloaded content is not a PDF")
+        return content
+
+
+async def add_papers(args: AddPapersArgs, ctx: ToolExecutionContext) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    for paper_id in args.paper_ids:
+        detail = await ctx.openalex.get(paper_id)
+        title = str(detail.get("title") or paper_id)
+        content: bytes | None = None
+        media_type = "text/markdown"
+        suffix = ".md"
+        imported_as = "metadata"
+        pdf_url = detail.get("pdf_url")
+        if pdf_url:
+            try:
+                content = await _fetch_pdf(str(pdf_url))
+                media_type = "application/pdf"
+                suffix = ".pdf"
+                imported_as = "pdf"
+            except Exception:
+                content = None
+        if content is None:
+            content = _paper_markdown(detail).encode("utf-8")
+        document, version, job = await create_source(
+            ctx.db,
+            ctx.settings,
+            notebook_id=ctx.state.notebook_id,
+            title=title,
+            media_type=media_type,
+            content=content,
+            suffix=suffix,
+        )
+        ctx.db.add(
+            ExternalPaperResult(
+                run_id=ctx.state.run_id,
+                provider="openalex",
+                provider_paper_id=paper_id,
+                data=detail,
+            )
+        )
+        await ctx.db.commit()
+        items.append(
+            {
+                "document_id": document.id,
+                "version_id": version.id,
+                "job_id": job.id,
+                "title": title,
+                "imported_as": imported_as,
+            }
+        )
+    return {"items": items, "persisted_to_notebook": True}
+
+
+async def remove_sources(args: RemoveSourcesArgs, ctx: ToolExecutionContext) -> dict[str, Any]:
+    removed: list[str] = []
+    not_found: list[str] = []
+    for document_id in args.document_ids:
+        document = await ctx.db.scalar(
+            select(Document).where(
+                Document.id == document_id, Document.notebook_id == ctx.state.notebook_id
+            )
+        )
+        if not document:
+            not_found.append(document_id)
+            continue
+        await delete_source(ctx.db, ctx.retrieval, document, ctx.settings)
+        removed.append(document.id)
+    return {"removed": removed, "not_found": not_found}
+
+
 def build_native_registry() -> ToolRegistry:
     registry = ToolRegistry()
     definitions = [
@@ -216,6 +328,21 @@ def build_native_registry() -> ToolRegistry:
             PaperDetailsArgs,
             "read",
             paper_details,
+        ),
+        (
+            "add_paper_to_notebook",
+            "把 OpenAlex 外部论文加入当前 Notebook（有开放获取PDF则抓取全文，"
+            "否则加入摘要与元数据）。",
+            AddPapersArgs,
+            "write",
+            add_papers,
+        ),
+        (
+            "remove_notebook_source",
+            "从当前 Notebook 删除指定来源及其检索索引。",
+            RemoveSourcesArgs,
+            "destructive",
+            remove_sources,
         ),
         (
             "load_skill",

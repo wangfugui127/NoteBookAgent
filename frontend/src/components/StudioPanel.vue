@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectCitation: [evidenceId: string]
-  close: []
+  collapse: []
 }>()
 
 const { notes } = useNotes(props.notebookId)
@@ -70,8 +70,14 @@ function locator(citation: Citation) {
       >
         {{ tab.label }}<template v-if="tab.count"> · {{ tab.count }}</template>
       </button>
-      <button class="btn btn--quiet btn--sm only-compact" type="button" aria-label="关闭面板" @click="emit('close')">
-        ✕
+      <button
+        class="icon-btn icon-btn--ghost studio__collapse"
+        type="button"
+        aria-label="收起面板"
+        title="收起"
+        @click="emit('collapse')"
+      >
+        »
       </button>
     </div>
 

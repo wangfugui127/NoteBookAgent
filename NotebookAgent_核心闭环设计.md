@@ -93,6 +93,10 @@ Harness工具
 
 Tool Search只缩小传给模型的Schema集合；DeepSeek仍决定最终动作。JEV以后替换`RouterProvider.select_tools()`，不能越过Registry、审批和Dispatcher。
 
+工作区写入工具：`add_paper_to_notebook`（风险`write`，把OpenAlex论文加入Notebook，有开放获取PDF抓全文，否则加入摘要与元数据）、`remove_notebook_source`（风险`destructive`）。
+
+权限模式由用户在工作台输入框旁选择，三档：`read_only`（只允许read，写入直接拒绝并返回`permission_denied`）、`confirm`（write/destructive创建ApprovalRequest并暂停）、`auto`（Agent完全控制，直接执行）。默认`confirm`；模式存`User.approval_mode`，可被单次Run覆盖。审批`reason`与审计记录工具、风险与模式。
+
 ## 4. 分层RAG与GraphRAG
 
 `retrieval_mode`支持`hybrid / hybrid_graph / layered / auto / comprehensive`。`auto`在存在论文画像时走分层，否则回退flat hybrid。
@@ -164,6 +168,8 @@ flowchart LR
 ```
 
 第一级无LLM；第二级把较旧Turn压成"目标/已完成/关键结论与[evidence]/待办/当前状态"摘要并写入`ConversationSummary`。保留最近`CONTEXT_KEEP_RECENT_TURNS`个Turn原文。
+
+历史默认全量保留，只有达到阈值才压缩；裁剪只在Turn边界进行，绝不拆开`assistant tool_calls`与其`tool`结果。旧工具结果在microcompact时替换为占位符（保留配对，模型据此知道"已调用过"）；发送前统一`sanitize_messages()`补齐不完整工具组、丢弃孤儿`tool`。失败或中断的Run也会保存（消毒后的）已完成transcript，重试/续跑时重建，避免重复查询。
 
 永不删除：当前Query、当前附件窗口、任务状态、有效Citation、安全规则、进行中的Tool Call。
 

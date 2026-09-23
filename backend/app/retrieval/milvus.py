@@ -96,6 +96,13 @@ class MilvusStore:
         self.ensure_document_collection()
         self.client.upsert(self.settings.milvus_document_collection, rows)
 
+    def delete_by_document(self, document_id: str) -> None:
+        expression = f'document_id == "{document_id}"'
+        if self.client.has_collection(self.settings.milvus_collection):
+            self.client.delete(self.settings.milvus_collection, filter=expression)
+        if self.client.has_collection(self.settings.milvus_document_collection):
+            self.client.delete(self.settings.milvus_document_collection, filter=expression)
+
     def _search(
         self,
         collection: str,

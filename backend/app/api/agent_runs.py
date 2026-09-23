@@ -4,7 +4,7 @@ import asyncio
 import json
 
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sse_starlette.sse import EventSourceResponse
 
 from app.agent.tasks import execute_agent_run_task
@@ -48,6 +48,16 @@ async def create_run(payload: AgentRunCreate, db: DbSession, user: CurrentUser) 
     )
     db.add(input_message)
     await db.flush()
+    message_count = await db.scalar(
+        select(func.count(Message.id)).where(Message.conversation_id == conversation.id)
+    )
+    if (message_count or 0) <= 1 and (conversation.title or "").strip() in {
+        "",
+        "New conversation",
+        "研究对话",
+    }:
+        conversation.title = payload.query.strip()[:30] or conversation.title
+    approval_mode = payload.approval_mode or user.approval_mode or "confirm"
     run = AgentRun(
         conversation_id=conversation.id,
         user_id=user.id,
@@ -57,6 +67,7 @@ async def create_run(payload: AgentRunCreate, db: DbSession, user: CurrentUser) 
         state={
             "attachment_instructions": payload.attachment_instructions,
             "input_message_id": input_message.id,
+            "approval_mode": approval_mode,
         },
     )
     db.add(run)
@@ -156,6 +167,8 @@ async def list_approvals(run_id: str, db: DbSession, user: CurrentUser) -> dict[
                 "id": item.id,
                 "status": item.status,
                 "reason": item.reason,
+                "mode": item.mode,
+                "tool_risk": item.tool_risk,
                 "tool_call_id": item.tool_call_id,
             }
             for item in approvals

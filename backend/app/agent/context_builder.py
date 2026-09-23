@@ -115,9 +115,8 @@ class ContextBuilder:
         layers: dict[str, int] = {}
         system = ROOT_AGENT_SYSTEM_PROMPT
         layers["system_prompt"] = estimate_tokens(system)
-        recent_with_meta = history[-12:]
         recent: list[dict[str, Any]] = []
-        for item in recent_with_meta:
+        for item in history:
             entry: dict[str, Any] = {
                 "role": item.get("role", "user"),
                 "content": item.get("content", ""),

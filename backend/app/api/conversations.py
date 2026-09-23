@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Response
+from sqlalchemy import delete, select
 
 from app.api.dependencies import CurrentUser, DbSession
 from app.models import (
+    AgentRun,
     Citation,
     Conversation,
     ConversationResourceSelection,
@@ -12,6 +13,7 @@ from app.models import (
     Evidence,
     Message,
     Notebook,
+    RunStatus,
 )
 from app.schemas import ConversationCreate, ResourceSelectionUpdate
 
@@ -131,6 +133,34 @@ async def create_conversation(
         )
     await db.commit()
     return {"id": conversation.id}
+
+
+@router.delete("/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: str, db: DbSession, user: CurrentUser
+) -> Response:
+    conversation = await db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id, Conversation.user_id == user.id
+        )
+    )
+    if not conversation:
+        raise HTTPException(404, "conversation not found")
+    active_run = await db.scalar(
+        select(AgentRun.id)
+        .where(
+            AgentRun.conversation_id == conversation_id,
+            AgentRun.status.in_(
+                [RunStatus.pending, RunStatus.running, RunStatus.waiting_approval]
+            ),
+        )
+        .limit(1)
+    )
+    if active_run:
+        raise HTTPException(409, "对话正在运行，请先停止")
+    await db.execute(delete(Conversation).where(Conversation.id == conversation_id))
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.put("/{conversation_id}/resources/{document_id}")

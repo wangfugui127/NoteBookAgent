@@ -5,7 +5,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agent_runs, auth, conversations, notebooks, papers, runtime_config
+from app.api import (
+    agent_runs,
+    auth,
+    conversations,
+    notebooks,
+    papers,
+    runtime_config,
+    users,
+)
 from app.core.config import get_settings
 from app.mcp_runtime.client_manager import McpClientManager
 from app.mcp_runtime.server import mcp_http_app, mcp_server
@@ -47,6 +55,7 @@ async def health() -> dict[str, str]:
 
 for router in (
     auth.router,
+    users.router,
     notebooks.router,
     conversations.router,
     papers.router,

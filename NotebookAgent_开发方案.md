@@ -149,7 +149,9 @@ Skills由`config/skills.yaml`和`skills/<id>/SKILL.md`管理。System Prompt只�
 
 ## 8. 权限、恢复与上下文
 
-工具风险为`read / write / destructive`。原生查询工具直接执行；MCP写操作、破坏性操作和未知工具创建`ApprovalRequest`，Run进入`waiting_approval`。拒绝后只写入`approval_rejected` Observation，不执行工具。
+工具风险为`read / write / destructive`。用户在工作台输入框旁选择权限模式，三档：`read_only`（只执行read，写入直接拒绝，写`permission_denied` Observation）、`confirm`（默认，write/destructive创建`ApprovalRequest`，Run进入`waiting_approval`）、`auto`（Agent完全控制，直接执行）。模式存`User.approval_mode`（`GET/PUT /api/v1/users/me/settings`），可在创建Run时用`approval_mode`覆盖。拒绝后只写入`approval_rejected` Observation，不执行工具。
+
+工作区写入/删除工具：`add_paper_to_notebook`（write，支持多篇；有开放获取PDF则抓取全文，否则把标题/作者/年份/摘要/来源作为可检索Markdown来源）、`remove_notebook_source`（destructive，删除来源并清理MySQL/Milvus/Neo4j）。
 
 每轮上下文：
 
@@ -177,6 +179,8 @@ GET  /api/v1/agent/runs/{run_id}/events
 GET  /api/v1/agent/runs/{run_id}/context-manifest
 POST /api/v1/agent/runs/{run_id}/cancel
 POST /api/v1/agent/runs/{run_id}/retry
+GET  /api/v1/users/me/settings
+PUT  /api/v1/users/me/settings
 GET  /api/v1/runtime/mcp
 POST /api/v1/runtime/mcp/reload
 POST /api/v1/runtime/mcp/{server_id}/test

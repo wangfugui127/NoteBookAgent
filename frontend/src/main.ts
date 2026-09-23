@@ -5,7 +5,6 @@ import App from './App.vue'
 import LoginView from './views/LoginView.vue'
 import NotebooksView from './views/NotebooksView.vue'
 import WorkspaceView from './views/WorkspaceView.vue'
-import PaperSearchView from './views/PaperSearchView.vue'
 import './style.css'
 
 const router = createRouter({
@@ -15,7 +14,6 @@ const router = createRouter({
     { path: '/login', component: LoginView },
     { path: '/notebooks', component: NotebooksView },
     { path: '/notebooks/:id', component: WorkspaceView },
-    { path: '/notebooks/:id/papers', component: PaperSearchView },
   ],
 })
 

@@ -262,7 +262,8 @@ backend/app/tools/native.py
 
 - `router.py`：定义可被JEV替换的`RouterProvider`，默认使用SiliconFlow Embedding筛选最多12个候选，失败时确定性降级。
 - `registry.py`：保存工具摘要、完整Schema、风险、参数校验和Dispatcher。
-- `native.py`：六个业务工具与三个Harness工具的参数模型和处理器。
+- `native.py`：六个业务工具、三个Harness工具，以及工作区写入工具`add_paper_to_notebook`（write）与`remove_notebook_source`（destructive）。
+- `registry.py`同时提供`decide(tool, mode)`：`read`直接执行；`write/destructive`在`read_only`下拒绝、`confirm`下审批、`auto`下直接执行。
 
 ### 横向数据流
 
@@ -432,7 +433,7 @@ frontend/src/style.css
 - `api.ts`：Axios JWT和fetch SSE解析。
 - `LoginView`：注册/登录。
 - `NotebooksView`：创建和进入Notebook。
-- `WorkspaceView`：上传、全文附件选择、恢复已有对话、发送Query、实时Run轨迹、审批和Evidence Rail。
+- `WorkspaceView`：上传、全文附件选择、恢复已有对话、发送Query、实时Run轨迹、审批和Evidence Rail；输入框旁提供权限模式选择（只读/询问/全权），收到`approval_required`时弹非阻塞提示并高亮审批卡片。
 - `PaperSearchView`：检索OpenAlex元数据、查看详情并把选中的论文信息带入研究对话。
 - `style.css`：统一研究型视觉语言、三栏工作台、移动端重排、可见焦点和减少动态效果偏好。
 

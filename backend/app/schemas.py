@@ -62,6 +62,15 @@ class AgentRunCreate(BaseModel):
     query: str = Field(min_length=1)
     attachment_ids: list[str] = Field(default_factory=list)
     attachment_instructions: dict[str, str] = Field(default_factory=dict)
+    approval_mode: Literal["read_only", "confirm", "auto"] | None = None
+
+
+class UserSettingsView(BaseModel):
+    approval_mode: Literal["read_only", "confirm", "auto"]
+
+
+class UserSettingsUpdate(BaseModel):
+    approval_mode: Literal["read_only", "confirm", "auto"]
 
 
 class AgentRunView(ORMModel):

@@ -17,6 +17,12 @@ export interface ChatMessage {
   citations?: Citation[]
 }
 
+export interface ConversationSummary {
+  id: string
+  title: string
+  updated_at: string
+}
+
 export interface DocumentItem {
   id: string
   title: string
@@ -50,6 +56,8 @@ export interface Paper {
   citation_count: number
   source: string
 }
+
+export type ApprovalMode = 'read_only' | 'confirm' | 'auto'
 
 export interface McpServer {
   id: string

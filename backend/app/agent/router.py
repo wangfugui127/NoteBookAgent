@@ -21,6 +21,8 @@ CORE_TOOL_HINTS: dict[str, tuple[str, ...]] = {
     "get_notebook_items": ("原文", "详细", "上下文", "全文"),
     "search_papers": ("最新论文", "相关论文", "openalex", "外部"),
     "get_paper_details": ("论文详情", "作者", "doi", "摘要"),
+    "add_paper_to_notebook": ("加入工作区", "加入notebook", "导入", "保存到", "采集"),
+    "remove_notebook_source": ("删除来源", "移除来源", "删除论文"),
     "load_skill": ("skill", "文献综述", "流程"),
     "tool_search": ("工具", "能力", "mcp"),
     "read_mcp_resource": ("mcp resource", "mcp资源"),

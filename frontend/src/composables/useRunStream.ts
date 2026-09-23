@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { api, streamRun } from '../api'
-import type { Citation, TraceItem } from '../types'
+import type { ApprovalMode, Citation, TraceItem } from '../types'
 
 export function useRunStream() {
   const liveText = ref('')
@@ -36,7 +36,9 @@ export function useRunStream() {
     conversationId: string
     query: string
     attachmentIds: string[]
+    approvalMode?: ApprovalMode
     onComplete: (answer: string, citations: Citation[]) => void
+    onApproval?: (payload: any) => void
   }) {
     running.value = true
     status.value = 'pending'
@@ -52,6 +54,7 @@ export function useRunStream() {
         attachment_instructions: Object.fromEntries(
           params.attachmentIds.map((id) => [id, '结合当前问题处理全文']),
         ),
+        approval_mode: params.approvalMode,
       })
       const runId = data.id as string
       streamController?.abort()
@@ -64,7 +67,10 @@ export function useRunStream() {
             trace.value.push({ id: eventId, event, label: traceLabel(event, payload) })
           }
           if (event === 'text_delta') liveText.value += payload.delta
-          if (event === 'approval_required') void refreshApprovals(runId)
+          if (event === 'approval_required') {
+            void refreshApprovals(runId)
+            params.onApproval?.(payload)
+          }
           if (event === 'run_completed') {
             params.onComplete(payload.answer, payload.citations || [])
             liveText.value = ''
@@ -92,5 +98,27 @@ export function useRunStream() {
     streamController?.abort()
   }
 
-  return { liveText, status, running, trace, approvals, error, start, stop, resolveApproval }
+  function reset() {
+    streamController?.abort()
+    streamController = undefined
+    running.value = false
+    status.value = 'idle'
+    liveText.value = ''
+    trace.value = []
+    approvals.value = []
+    error.value = ''
+  }
+
+  return {
+    liveText,
+    status,
+    running,
+    trace,
+    approvals,
+    error,
+    start,
+    stop,
+    reset,
+    resolveApproval,
+  }
 }

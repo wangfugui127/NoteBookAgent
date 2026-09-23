@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.compactor import ContextCompactor
 from app.agent.context_builder import ContextBuilder, estimate_tokens
 from app.agent.events import EventStore
+from app.agent.messages import sanitize_messages
 from app.agent.router import EmbeddingRouterProvider, RouterProvider
 from app.agent.types import AgentState, AttachmentPayload, QueryEnvelope
 from app.core.config import Settings
@@ -152,25 +153,28 @@ class AgentRuntime:
             )
         if not messages:
             return await self._message_history(db, conversation_id)
-        return self._cap_history(messages, self.settings.effective_input_budget)
+        return sanitize_messages(messages)
 
     async def _save_transcript(
         self,
         db: AsyncSession,
         run: AgentRun,
         messages: list[dict[str, Any]],
-        answer: str,
+        answer: str | None = None,
     ) -> None:
+        cleaned = sanitize_messages(
+            [item for item in messages if item.get("role") in {"user", "assistant", "tool"}]
+        )
         stored = [
             {
                 key: item[key]
                 for key in ("role", "content", "tool_calls", "tool_call_id")
                 if key in item
             }
-            for item in messages
-            if item.get("role") in {"user", "assistant", "tool"}
+            for item in cleaned
         ]
-        stored.append({"role": "assistant", "content": answer})
+        if answer is not None:
+            stored.append({"role": "assistant", "content": answer})
         existing = await db.get(RunTranscript, run.id)
         if existing:
             existing.messages = stored
@@ -493,7 +497,7 @@ class AgentRuntime:
         record = await db.get(ToolCall, entry["tool_call_id"])
         if record:
             record.status = "completed" if observation.get("ok") else "failed"
-            if observation.get("error_code") == "approval_rejected":
+            if observation.get("error_code") in {"approval_rejected", "permission_denied"}:
                 record.status = "rejected"
             record.result = observation
         await self._persist_observation_evidence(db, run, state, entry["name"], observation)
@@ -530,6 +534,7 @@ class AgentRuntime:
         start_index: int = 0,
     ) -> bool:
         """Process every provider call or pause at exactly one approval boundary."""
+        mode = str(run.state.get("approval_mode") or "confirm")
         for index in range(start_index, len(entries)):
             entry = entries[index]
             if not entry.get("executable", True):
@@ -544,11 +549,32 @@ class AgentRuntime:
                     db, run, state, messages, entry, observation, candidate_names
                 )
                 continue
-            if self.registry.requires_approval(entry["name"]):
+            decision = self.registry.decide(entry["name"], mode)
+            if decision == "deny":
+                observation = {
+                    "ok": False,
+                    "tool_name": entry["name"],
+                    "error_code": "permission_denied",
+                    "content": {
+                        "message": f"当前权限模式为 {mode}，不允许执行 {entry['name']}。"
+                    },
+                    "truncated": False,
+                }
+                await self._finish_batch_call(
+                    db, run, state, messages, entry, observation, candidate_names
+                )
+                continue
+            if decision == "approve":
+                reason = (
+                    f"工具 {entry['name']} 的风险等级为 {entry['risk']}，"
+                    f"当前权限模式 {mode} 需要用户确认。"
+                )
                 approval = ApprovalRequest(
                     run_id=run.id,
                     tool_call_id=entry["tool_call_id"],
-                    reason=f"工具 {entry['name']} 的风险等级为 {entry['risk']}，需要用户确认。",
+                    reason=reason,
+                    mode=mode,
+                    tool_risk=str(entry["risk"]),
                 )
                 db.add(approval)
                 await db.flush()
@@ -563,7 +589,13 @@ class AgentRuntime:
                     db,
                     run.id,
                     "approval_required",
-                    {"approval_id": approval.id, "tool": entry["name"]},
+                    {
+                        "approval_id": approval.id,
+                        "tool": entry["name"],
+                        "risk": entry["risk"],
+                        "mode": mode,
+                        "reason": reason,
+                    },
                 )
                 await db.commit()
                 return True
@@ -671,6 +703,7 @@ class AgentRuntime:
                 await self.events.emit(db, run.id, "text_delta", {"delta": delta})
                 await db.commit()
 
+            messages = sanitize_messages(messages)
             response = await self.provider.invoke(messages, schemas, on_delta)
             if not response.tool_calls:
                 await self._save_transcript(db, run, messages, response.content)
@@ -729,6 +762,7 @@ class AgentRuntime:
             ):
                 return None
             await self._checkpoint(db, run, f"round_{state.round_no}", state)
+            await self._save_transcript(db, run, messages)
             await db.commit()
         raise RuntimeError("maximum agent rounds exceeded")
 

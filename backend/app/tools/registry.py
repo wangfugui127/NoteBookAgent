@@ -4,13 +4,16 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
 from app.agent.types import AgentState, ToolObservation, ToolSummary
 
 ToolHandler = Callable[[BaseModel, "ToolExecutionContext"], Awaitable[dict[str, Any]]]
+
+ApprovalMode = Literal["read_only", "confirm", "auto"]
+PermissionDecision = Literal["allow", "approve", "deny"]
 
 
 @dataclass(slots=True)
@@ -116,6 +119,18 @@ class ToolRegistry:
     def requires_approval(self, name: str) -> bool:
         definition = self.definitions.get(name)
         return not definition or definition.risk in {"write", "destructive"}
+
+    def decide(self, name: str, mode: str = "confirm") -> PermissionDecision:
+        """Combine tool risk with the user-selected approval mode."""
+        definition = self.definitions.get(name)
+        risk = definition.risk if definition else "write"
+        if risk == "read":
+            return "allow"
+        if mode == "auto":
+            return "allow"
+        if mode == "read_only":
+            return "deny"
+        return "approve"
 
     async def dispatch(
         self, name: str, arguments: dict[str, Any], context: ToolExecutionContext

@@ -202,20 +202,22 @@ watch(open, (value) => {
         </template>
 
         <template v-else-if="activeTab === 'web'">
-          <form class="papers__form" style="border: 0; padding: 0; margin: 0" @submit.prevent="searchPapers">
-            <label class="field field--query">
+          <form class="source-search-form" @submit.prevent="searchPapers">
+            <label class="field">
               <span>研究主题</span>
               <input v-model="query" class="input" placeholder="例如：remote sensing wildfire change detection" />
             </label>
-            <label class="field">
-              <span>起始年份</span>
-              <input v-model="yearFrom" class="input" type="number" min="1800" max="2200" placeholder="2020" />
-            </label>
-            <label class="field">
-              <span>截止年份</span>
-              <input v-model="yearTo" class="input" type="number" min="1800" max="2200" placeholder="2026" />
-            </label>
-            <button class="btn btn--primary" :disabled="searching">{{ searching ? '检索中' : '搜索' }}</button>
+            <div class="source-search-form__row">
+              <label class="field">
+                <span>起始年份</span>
+                <input v-model="yearFrom" class="input" type="number" min="1800" max="2200" placeholder="2020" />
+              </label>
+              <label class="field">
+                <span>截止年份</span>
+                <input v-model="yearTo" class="input" type="number" min="1800" max="2200" placeholder="2026" />
+              </label>
+              <button class="btn btn--primary" :disabled="searching">{{ searching ? '检索中' : '搜索' }}</button>
+            </div>
           </form>
 
           <p v-if="searchError" class="form-error" style="margin-top: 12px">{{ searchError }}</p>

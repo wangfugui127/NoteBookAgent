@@ -34,6 +34,7 @@ notebookagent/
 │  │  │  ├─ conversations.py       # 会话与资源选择
 │  │  │  ├─ agent_runs.py          # Run、SSE、Manifest、审批
 │  │  │  ├─ papers.py              # OpenAlex论文检索与详情
+│  │  │  ├─ users.py               # 用户设置（权限模式）
 │  │  │  └─ runtime_config.py      # MCP/Skills状态与Reload
 │  │  ├─ prompts/                  # 后端提示词唯一集中目录
 │  │  │  ├─ agent.py               # Root、分窗、引用、汇总与上下文压缩提示词
@@ -57,6 +58,7 @@ notebookagent/
 │  │  │  └─ types.py               # SearchHit
 │  │  ├─ agent/
 │  │  │  ├─ types.py               # QueryEnvelope、Manifest、State
+│  │  │  ├─ messages.py            # Turn切分、工具配对消毒、旧工具结果清理
 │  │  │  ├─ context_builder.py     # 全文装箱与完整分窗
 │  │  │  ├─ compactor.py           # 0.6/0.75两级上下文压缩
 │  │  │  ├─ router.py              # Embedding Router与JEV扩展协议
@@ -64,8 +66,8 @@ notebookagent/
 │  │  │  ├─ events.py              # MySQL事件与Redis发布
 │  │  │  └─ tasks.py               # Celery Agent入口
 │  │  ├─ tools/
-│  │  │  ├─ registry.py            # Schema、风险、Dispatcher
-│  │  │  └─ native.py              # 六个业务工具与Harness工具
+│  │  │  ├─ registry.py            # Schema、风险、权限策略与Dispatcher
+│  │  │  └─ native.py              # 业务/Harness工具与工作区写入工具
 │  │  ├─ mcp_runtime/
 │  │  │  ├─ client_manager.py      # stdio/HTTP发现与调用
 │  │  │  └─ server.py              # /mcp只读服务与权限复查

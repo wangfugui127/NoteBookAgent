@@ -23,6 +23,8 @@ class OpenAlexProvider:
     @staticmethod
     def normalize(work: dict[str, Any]) -> dict[str, Any]:
         primary = work.get("primary_location") or {}
+        best = work.get("best_oa_location") or {}
+        open_access = work.get("open_access") or {}
         source = primary.get("source") or {}
         return {
             "paper_id": work.get("id", "").rsplit("/", 1)[-1],
@@ -35,6 +37,9 @@ class OpenAlexProvider:
             "abstract": reconstruct_abstract(work.get("abstract_inverted_index")),
             "doi": work.get("doi"),
             "url": primary.get("landing_page_url") or work.get("doi"),
+            "pdf_url": best.get("pdf_url") or primary.get("pdf_url"),
+            "is_oa": bool(open_access.get("is_oa")),
+            "oa_url": open_access.get("oa_url"),
             "citation_count": work.get("cited_by_count", 0),
             "source": source.get("display_name") or "OpenAlex",
         }

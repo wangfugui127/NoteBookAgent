@@ -24,6 +24,31 @@ def _add_missing_columns(sync_connection) -> None:
                     "ADD COLUMN graph_status VARCHAR(24) NOT NULL DEFAULT 'pending'"
                 )
             )
+    if inspector.has_table("users"):
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        if "approval_mode" not in columns:
+            sync_connection.execute(
+                text(
+                    "ALTER TABLE users "
+                    "ADD COLUMN approval_mode VARCHAR(16) NOT NULL DEFAULT 'confirm'"
+                )
+            )
+    if inspector.has_table("approval_requests"):
+        columns = {column["name"] for column in inspector.get_columns("approval_requests")}
+        if "mode" not in columns:
+            sync_connection.execute(
+                text(
+                    "ALTER TABLE approval_requests "
+                    "ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT 'confirm'"
+                )
+            )
+        if "tool_risk" not in columns:
+            sync_connection.execute(
+                text(
+                    "ALTER TABLE approval_requests "
+                    "ADD COLUMN tool_risk VARCHAR(16) NOT NULL DEFAULT 'write'"
+                )
+            )
 
 
 async def main() -> None:
